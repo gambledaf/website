@@ -1,0 +1,162 @@
+/* 1. RESET: Clears out default browser spacing */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Arial', sans-serif; /* We can change this to a custom font later */
+}
+#bg-canvas {
+  position: absolute; /* Breaks it out of the normal HTML flow */
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1; /* The negative number pushes it backwards in 3D space (behind the UI) */
+  pointer-events: none; /* Optional: Stops the canvas from blocking clicks on your menu */
+}
+/* 2. BACKGROUND: Setting the scene dark */
+body {
+  background-color: #0a0a0a; 
+}
+#loading-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: #0a0a0a; /* Matches your Three.js scene background */
+    z-index: 9999; /* Keeps it on top of everything */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.8s ease-out; /* Smooth fade when done */
+    pointer-events: none;
+}
+
+#loading-text {
+    color: #00ff00;
+    font-family: monospace;
+    font-size: 24px;
+    font-weight: bold;
+    letter-spacing: 2px;
+}
+
+/* 3. NAVBAR WRAPPER */
+.navbar {
+  background-color: #0a0a0a;
+  height: 80px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative; 
+  z-index: 10; 
+  
+}
+
+/* 4. CONTAINER LAYOUT: Pushing items to opposite sides */
+.navbar__container {
+  display: flex;
+  justify-content: space-between; /* Keeps logo left and menu right */
+  align-items: center;
+  width: 100%;            /* Allows the container to span the full width */
+   /* Optional: keeps the right side symmetrical */
+}
+/* 5. LOGO STYLING */
+#navbar__logo {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  margin-left: 10px; /* <-- This controls ONLY the logo's distance from the left */
+}
+
+/* 6. MENU LAYOUT */
+.navbar__menu {
+  display: flex;
+  align-items: center;
+  list-style: none; /* Removes the default bullet points */
+  margin-right: 50px;
+}
+
+/* 7. LINK STYLING */
+.navbar__links {
+  color: #ffffff;
+  text-decoration: none;
+  padding: 0 0.8rem;
+  font-weight: bold;
+  font-size: 0.9rem;
+  transition: color 0.3s ease; /* Makes the hover effect smooth */
+}
+
+/* 8. INTERACTIVITY: What happens when the mouse hovers over a link */
+.navbar__links:hover {
+  color: #888888; /* Dims the text slightly */
+}
+
+.logo-image {
+  height: 150px; /* Adjust this to make the logo bigger or smaller */
+  width: auto;  /* Keeps the logo's original proportions */
+  display: block;
+}
+
+/* --- TAPE HOVER UI --- */
+#tape-hover-ui {
+    position: fixed;
+    top: 15%;  /* Adjust this to match your header layout */
+    left: 8%; 
+    color: #00ff44;
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: bold;
+    text-shadow: 0 0 8px rgba(0, 255, 68, 0.8);
+    pointer-events: none; /* Lets the mouse click through it to the 3D canvas */
+    opacity: 0; /* Hidden by default */
+    transition: opacity 0.3s ease;
+    z-index: 50;
+}
+
+/* --- TAPE HOVER UI --- */
+#tape-hover-ui {
+    position: fixed;
+    top: 15%;  /* Adjust this to match your header layout */
+    left: 8%; 
+    color: #00ff44;
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: bold;
+    text-shadow: 0 0 8px rgba(0, 255, 68, 0.8);
+    pointer-events: none; /* Lets the mouse click through it to the 3D canvas */
+    opacity: 0; /* Hidden by default */
+    transition: opacity 0.3s ease;
+    z-index: 50;
+}
+
+#tape-hover-ui.visible {
+    opacity: 1; /* Fades in when hovered */
+}
+
+#tape-hover-ui .hud-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    font-size: 20px;
+    letter-spacing: 1px;
+}
+
+#tape-hover-ui .play-line {
+    margin-left: 32px; /* Indents the text past the blinking block */
+}
+
+#tape-hover-ui .hover-desc {
+    color: #ffffff; /* Slightly dimmer green for the description */
+    font-size: 14px;
+    font-weight: normal;
+    text-shadow: none;
+    margin-top: -4px;
+}
+
+.blink-block {
+    animation: blinker 1s steps(2, start) infinite;
+}
+
+@keyframes blinker {
+    to { visibility: hidden; }
+}

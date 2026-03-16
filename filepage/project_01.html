@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Project 01</title>
+    <link rel="stylesheet" href="../style.css"> 
+</head>
+<body>
+
+    <a href="../index.html" class="back-btn" id="eject-btn">■ EJECT & RETURN</a>
+
+    <script src="../navbar.js"></script>
+
+    <script>
+        // Optional: Your Eject & Return memory script from earlier, updated with ../
+        document.getElementById('eject-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            localStorage.setItem('returnTapeIndex', 0); // Use 0 for project_01, 1 for project_02
+            document.body.style.transition = "opacity 0.5s ease";
+            document.body.style.opacity = "0";
+            setTimeout(() => { window.location.href = "../index.html"; }, 500);
+        });
+    </script>
+</body>
+</html>
