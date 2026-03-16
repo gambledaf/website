@@ -98,27 +98,13 @@ body {
   display: block;
 }
 
-/* --- TAPE HOVER UI --- */
-#tape-hover-ui {
-    position: fixed;
-    top: 15%;  /* Adjust this to match your header layout */
-    left: 8%; 
-    color: #00ff44;
-    font-family: 'Courier New', Courier, monospace;
-    font-weight: bold;
-    text-shadow: 0 0 8px rgba(0, 255, 68, 0.8);
-    pointer-events: none; /* Lets the mouse click through it to the 3D canvas */
-    opacity: 0; /* Hidden by default */
-    transition: opacity 0.3s ease;
-    z-index: 50;
-}
 
 /* --- TAPE HOVER UI --- */
 #tape-hover-ui {
     position: fixed;
     top: 15%;  /* Adjust this to match your header layout */
     left: 8%; 
-    color: #00ff44;
+    color: #00ff00;
     font-family: 'Courier New', Courier, monospace;
     font-weight: bold;
     text-shadow: 0 0 8px rgba(0, 255, 68, 0.8);
@@ -149,7 +135,7 @@ body {
     color: #ffffff; /* Slightly dimmer green for the description */
     font-size: 14px;
     font-weight: normal;
-    text-shadow: none;
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.8);;
     margin-top: -4px;
 }
 

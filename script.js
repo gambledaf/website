@@ -50,8 +50,8 @@ const state = {
     hoveredInteractable: null
 };
 
-const POS_START = { x: 0, y: 0.8, z: -1.5 };
-const POS_END   = { x: 0, y: 0.8, z: 5 };
+const POS_START = { x: 0, y: 0.6, z: -1.5 };
+const POS_END   = { x: 0, y: 0.4, z: 5 };
 
 let typingInterval = null;
 let fullGoalText = "";
@@ -220,7 +220,7 @@ sunLight.shadow.bias = -0.0005;
 scene.add(sunLight);
 
 // // 3. THE TV SOFTBOX (RectAreaLight)
-const helperVisability = true;
+const helperVisability = false;
 
 const rectLight = new THREE.RectAreaLight(0x00ff00, 1, 1.75, 1.5);
 rectLight.position.set(0, 0.8, -6); // Flush against the glass
@@ -527,8 +527,8 @@ loader.load("models/table.glb", gltf => {
             c.receiveShadow = true; // Crucial for the green glow to hit the wood/metal
             
             // Give it a slightly reflective "polished" finish
-            c.material.roughness = 1;
-            c.material.metalness = 0.0;
+            c.material.roughness = 0.5;
+            c.material.metalness = 0;
         }
     });
 
@@ -578,6 +578,30 @@ loader.load("models/tape.glb", gltf => {
         tapes.push(tape);
     }
 });
+
+// --- BACKGROUND RETRO GRID ---
+// Parameters: size of grid, number of squares, center line color, grid color
+const gridSize = 60;
+const gridDivisions = 60;
+const gridColor = 0xaaaaaa; // Light grey/white to match your reference
+
+const bgGrid = new THREE.GridHelper(gridSize, gridDivisions, gridColor, gridColor);
+
+// By default, GridHelper lays flat on the floor. 
+// We rotate it 90 degrees to stand it up like a wall facing the camera.
+bgGrid.rotation.x = Math.PI / 2;
+
+// Push it way back behind the TV and the table
+bgGrid.position.set(0, 0, -15); 
+
+// Make it look subtle and retro (adjust opacity to taste)
+bgGrid.material.transparent = true;
+bgGrid.material.opacity = 0.15; 
+
+// If you want your bloom pass to make it glow slightly, keep this line:
+bgGrid.material.color.setHex(0xffffff); 
+
+scene.add(bgGrid);
 
 // --- 6. LOGIC & TEXT ---
 function toggleTVPower() {
@@ -1006,23 +1030,3 @@ function animate() {
 }
 
 animate();
-
-document.getElementById('nav-home')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    handleSystemAction("home");
-});
-
-document.getElementById('nav-about')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    handleSystemAction("about");
-});
-
-document.getElementById('nav-projects')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    handleSystemAction("projects");
-});
-
-document.getElementById('nav-contact')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    handleSystemAction("contact");
-});
