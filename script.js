@@ -4,10 +4,9 @@ import { RenderPass } from "https://esm.sh/three@0.129.0/examples/jsm/postproces
 import { EffectComposer } from "https://esm.sh/three@0.129.0/examples/jsm/postprocessing/EffectComposer.js";
 import { UnrealBloomPass } from "https://esm.sh/three@0.129.0/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutlinePass } from "https://esm.sh/three@0.129.0/examples/jsm/postprocessing/OutlinePass.js";
-import { RectAreaLightUniformsLib } from "https://esm.sh/three@0.129.0/examples/jsm/lights/RectAreaLightUniformsLib.js";
-import { RectAreaLightHelper } from "https://esm.sh/three@0.129.0/examples/jsm/helpers/RectAreaLightHelper.js";
-import { projectData } from './files.js';
-
+import { setupSceneLights } from './js/lights.js';
+import { projectData } from './js/files.js';
+import { crtShaderMaterial, typeSentence, renderCRT, setScreenTextInstant } from './js/crt.js';
 
 // --- 1. SHARED HELPERS & STATE ---
 function getVisibleConfig() {
@@ -17,18 +16,12 @@ function getVisibleConfig() {
     return { count, radius: (count - 1) / 2 };
 }
 
+// ✅ Cache config — recomputed only on resize, not every frame
 let cachedConfig = getVisibleConfig();
-
-const { radius: initialRadius } = cachedConfig;
-
 const tapes = [];
 
 const numTapes = projectData.length;
 const tapeSpacing = 0.55;
-
-const visibleCount = Math.min(cachedConfig.count, numTapes);
-const radius = Math.floor((visibleCount - 1) / 2);
-
 const initialCenter = (numTapes - 1) / 2;
 
 const state = {
@@ -43,11 +36,7 @@ const state = {
     isLocked: false,
     scrollSpeed: 0.1,
     minDist: 999,
-    hoveredInteractable: null,
-    // ✅ NEW: scrolling is disabled until tapes finish loading
-    scrollingEnabled: false,
-    // ✅ NEW: tracks whether the scene has been revealed yet
-    sceneRevealed: false
+    hoveredInteractable: null
 };
 
 const POS_START = { x: 0, y: 0.6, z: -1.5 };
@@ -58,58 +47,10 @@ let fullGoalText = "";
 let currentText = "";
 let charIndex = 0;
 
-// --- 2. CRT TV INTERNAL SCENE ---
-const renderTarget = new THREE.WebGLRenderTarget(512, 512);
-const tvScene = new THREE.Scene();
-const tvCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-tvCamera.position.z = 5;
-
-const textCanvas = document.createElement("canvas");
-textCanvas.width = textCanvas.height = 512;
-const ctx = textCanvas.getContext("2d");
-
-const textTexture = new THREE.CanvasTexture(textCanvas);
-textTexture.center.set(0.5, 0.5);
-textTexture.flipY = false;
-
-const textMaterial = new THREE.MeshBasicMaterial({ map: textTexture, transparent: true });
-const textPlane = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), textMaterial);
-tvScene.add(textPlane);
-
-const crtShaderMaterial = new THREE.ShaderMaterial({
-    uniforms: {
-        tDiffuse: { value: renderTarget.texture },
-        uTime: { value: 0 }
-    },
-    vertexShader: `
-        varying vec2 vUv;
-        void main() { 
-            vUv = uv; 
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); 
-        }
-    `,
-    fragmentShader: `
-        uniform sampler2D tDiffuse; 
-        uniform float uTime; 
-        varying vec2 vUv;
-
-        void main() {
-            vec2 uv = vUv;
-            
-            vec4 tex = texture2D(tDiffuse, uv);
-
-            float movingLines = fract(uv.y * 25.0 - uTime * 0.8);
-            float scanline = step(0.1, movingLines);
-            
-            vec3 finalColor = tex.rgb * scanline;
-
-            gl_FragColor = vec4(finalColor * 2.5, 2.5);
-        }
-    `
-});
-
 // --- 3. GLOBAL SCENE ---
+
 const scene = new THREE.Scene();
+// scene.background = new THREE.Color(0x000000);
 const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.layers.enable(1);
 
@@ -120,6 +61,8 @@ const renderer = new THREE.WebGLRenderer({
 });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -133,121 +76,43 @@ const composer = new EffectComposer(renderer, hdrRenderTarget);
 composer.addPass(renderPass);
 
 const bloomPass = new UnrealBloomPass(
+    // ✅ Bloom at 75% resolution — visually identical, meaningfully cheaper
     new THREE.Vector2(window.innerWidth * 0.75, window.innerHeight * 0.75),
     2,
     0.5,
     1.2
 );
 composer.addPass(bloomPass);
-
+// --- NEW: OPTIMIZED OUTLINE PASS ---
+// Running at 50% resolution to save performance
 const outlinePass = new OutlinePass(
     new THREE.Vector2(window.innerWidth * 0.5, window.innerHeight * 0.5),
     scene,
     camera
 );
+
+// Performance tweak
 outlinePass.downSampleRatio = 2; 
+
+// Visual styling (Retro green to match your CRT)
 outlinePass.edgeStrength = 4.0;
 outlinePass.edgeGlow = 1.0;
 outlinePass.edgeThickness = 2.0;
 outlinePass.visibleEdgeColor.set(0x00ff44); 
 outlinePass.hiddenEdgeColor.set(0x002200);
+
 composer.addPass(outlinePass);
-
-// Lights   
-RectAreaLightUniformsLib.init();
-const ambientLight = new THREE.AmbientLight(0x004D4D, 0.2);
-scene.add(ambientLight);
-
-const tvTopLight = new THREE.PointLight(0xffffff, 15, 5);
-tvTopLight.position.set(0, 5, -7);
-tvTopLight.castShadow = true;
-tvTopLight.shadow.mapSize.width = 1024;
-tvTopLight.shadow.mapSize.height = 1024;
-tvTopLight.shadow.bias = -0.0005;
-scene.add(tvTopLight);
-
-const tapeLight = new THREE.PointLight(0xffffff, 0.4, 5); 
-tapeLight.position.set(0, 0.5, 2);
-tapeLight.castShadow = true;
-tapeLight.shadow.mapSize.width = 512;
-tapeLight.shadow.mapSize.height = 512;
-tapeLight.shadow.bias = -0.0005;
-scene.add(tapeLight);
-
-const tapeLightRect = new THREE.RectAreaLight(0xffffff, 5, 4, 2);
-tapeLightRect.position.set(0, 3, 2);
-tapeLightRect.lookAt(0, 0, 0);
-scene.add(tapeLightRect);
-
-const sunLight = new THREE.PointLight(0xffffff, 2, 500);
-sunLight.position.set(0, 100, -5);
-sunLight.castShadow = true;
-sunLight.shadow.mapSize.width = 1024;
-sunLight.shadow.mapSize.height = 1024; 
-sunLight.shadow.bias = -0.0005;
-scene.add(sunLight);
-
-const helperVisability = false;
-
-const rectLight = new THREE.RectAreaLight(0x00ff00, 1, 1.75, 1.5);
-rectLight.position.set(0, 0.8, -6);
-rectLight.lookAt(0, 0.8, 0);
-scene.add(rectLight);
-
-const tvRimLight = new THREE.RectAreaLight(0xCFFFD2, 25, 2, 0.5);
-tvRimLight.position.set(0, 2.3, -6);
-tvRimLight.lookAt(0, 1.5, -7);
-scene.add(tvRimLight);
-const helper = new RectAreaLightHelper(tvRimLight);  
-scene.add(helper);
-helper.visible = helperVisability;
-
-const tvRimLight1 = new THREE.RectAreaLight(0x3F755A, 40, 0.5, 1.5);
-tvRimLight1.position.set(1.5, 1, -7);
-tvRimLight1.lookAt(0, 1, -8);
-scene.add(tvRimLight1);
-const helper1 = new RectAreaLightHelper(tvRimLight1);  
-scene.add(helper1);
-helper1.visible = helperVisability;
-
-const tvRimLight2 = new THREE.RectAreaLight(0x3F755A, 40, 0.5, 1.5);
-tvRimLight2.position.set(-1.5, 1, -7);
-tvRimLight2.lookAt(0, 1, -8);
-scene.add(tvRimLight2);
-const helper2 = new RectAreaLightHelper(tvRimLight2);  
-scene.add(helper2);
-helper2.visible = helperVisability;
-
-const tvRimLight3 = new THREE.RectAreaLight(0xCFFFD2, 5, 1, 0.5);
-tvRimLight3.position.set(0, 0.5, -6.5);
-tvRimLight3.lookAt(0, 0, -7);
-scene.add(tvRimLight3);
-const helper3 = new RectAreaLightHelper(tvRimLight3);  
-scene.add(helper3);
-helper3.visible = helperVisability;
-
-const tableRimLight2 = new THREE.RectAreaLight(0x3F755A, 15, 5, 0.25);
-tableRimLight2.position.set(0, -0.7, 1);
-tableRimLight2.lookAt(0, 1, 0);
-scene.add(tableRimLight2);
-const helper4 = new RectAreaLightHelper(tableRimLight2);
-scene.add(helper4);
-helper4.visible = helperVisability;
-
-const tvRimLight5 = new THREE.RectAreaLight(0x00ff00, 15, 0.5, 1.5);
-tvRimLight5.position.set(0, 1, -6.5);
-tvRimLight5.lookAt(0, 0, -6.5);
-scene.add(tvRimLight5);
-const helper5 = new RectAreaLightHelper(tvRimLight5);  
-scene.add(helper5);
-helper5.visible = helperVisability;
+setupSceneLights(scene);
 
 // --- 4. SCENE DATA ---
 const mouse = new THREE.Vector2(-100, -100);
 const raycaster = new THREE.Raycaster();
 const clock = new THREE.Clock();
 
+// ✅ Reusable vector — avoids allocating new THREE.Vector3() every frame
 const tempVec = new THREE.Vector3();
+
+// ✅ Dedicated interactables list — raycaster only hits what matters
 const interactables = [];
 
 let tvModel;
@@ -256,50 +121,81 @@ let slideMixer = null;
 let slideAction = null;
 const blackMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
 
-// --- 5. LOADING SCREEN ---
+
+// --- 5. LOAD MODELS & LOADING SCREEN ---
+const bootManager = new THREE.LoadingManager();
+const tapeManager = new THREE.LoadingManager(); // Separate manager for tapes
 const loadingScreen = document.getElementById("loading-screen");
 const loadingText = document.getElementById("loading-text");
 
-// ✅ NEW: Track critical assets (TV, table, background, slide) separately from tapes
-let criticalLoaded = 0;
-const CRITICAL_TOTAL = 4; // tv, table, background, slide
+let bootComplete = false;
+let tapesComplete = false;
 
-function onCriticalAssetLoaded() {
-    criticalLoaded++;
-    const progress = Math.floor((criticalLoaded / CRITICAL_TOTAL) * 100);
-    if (loadingText) loadingText.innerText = `LOADING... ${progress}%`;
+// 1. BOOT SEQUENCE (UI & Environment)
+bootManager.onProgress = (url, itemsLoaded, itemsTotal) => {
+    const progress = Math.floor((itemsLoaded / itemsTotal) * 100);
+    loadingText.innerText = `BOOTING... ${progress}%`;
+};
 
-    if (criticalLoaded === CRITICAL_TOTAL) {
-        revealScene();
-    }
-}
+bootManager.onLoad = () => {
+    bootComplete = true;
+    loadingText.innerText = "SIGNAL ACQUIRED";
+    
+    // Jump cut the camera to render the scene once
+    camera.position.set(POS_END.x, POS_END.y, POS_END.z);
+    camera.lookAt(0, 0.8, -10);
+    composer.render();
 
-// ✅ NEW: Reveal the scene as soon as critical assets are ready
-// Tapes may still be loading in the background at this point
-function revealScene() {
-    if (state.sceneRevealed) return;
-    state.sceneRevealed = true;
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const action = urlParams.get('action');
-    const returnIndex = localStorage.getItem('returnTapeIndex');
-
-    // Pre-position camera
     camera.position.set(POS_START.x, POS_START.y, POS_START.z);
     camera.lookAt(0, 0.8, -10);
+    composer.render();
+    
+    setTimeout(() => renderer.compile(scene, camera), 100);
 
-    // Start the render loop NOW — tapes will pop in as they load
-    animate();
+    setTimeout(() => {
+        // Fade out DOM loading screen
+        loadingScreen.style.opacity = "0";
+        setTimeout(() => {
+            loadingScreen.style.display = "none";
+            document.body.style.opacity = "1";
+            
+            // Check if tapes are already done, otherwise show syncing
+            if (!tapesComplete) {
+                setScreenTextInstant("SYNCING ARCHIVES...\nPLEASE WAIT");
+            } else {
+                handleFinalLoadState();
+            }
+        }, 800);
+    }, 500);
+};
+
+// 2. TAPE SEQUENCE (Background downloading)
+tapeManager.onLoad = () => {
+    tapesComplete = true;
+    if (bootComplete) {
+        handleFinalLoadState();
+    }
+};
+
+tapeManager.onProgress = (url, itemsLoaded, itemsTotal) => {
+    if (bootComplete && !tapesComplete) {
+        const progress = Math.floor((itemsLoaded / itemsTotal) * 100);
+        setScreenTextInstant(`SYNCING ARCHIVES... ${progress}%\nPLEASE WAIT`);
+    }
+};
+
+function handleFinalLoadState() {
+    // Check for our hidden notes
+    const returnIndex = localStorage.getItem('returnTapeIndex');
+    
+    // Check for navbar actions in the URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const action = urlParams.get('action');
 
     if (returnIndex !== null) {
-        // --- EJECT & RETURN PATH ---
-        try {
-            localStorage.removeItem('returnTapeIndex');
-        } catch(e) {}
-
-        loadingScreen.style.display = "none";
-        document.body.style.opacity = "1";
-
+        // --- 1. EJECT & RETURN TRICK ---
+        localStorage.removeItem('returnTapeIndex'); 
+        
         const tapeId = parseInt(returnIndex);
         state.currentScroll = tapeId;
         state.targetScroll = tapeId;
@@ -313,7 +209,6 @@ function revealScene() {
         if (!state.tvOn) toggleTVPower();
         typeSentence("PROJECT EJECTED.\n\nRETURNING TO ARCHIVE...");
 
-        // Delay the eject animation — tapes might still be loading
         setTimeout(() => {
             const tapeToEject = tapes[tapeId];
             if (tapeToEject) {
@@ -328,11 +223,9 @@ function revealScene() {
             state.targetZoom = 0; 
         }, 800);
 
-    } else if (action) {
-        // --- NAVBAR CLICK PATH ---
-        loadingScreen.style.display = "none";
-        document.body.style.opacity = "1";
-
+    } else if (action && (action === "projects" || action === "home" || action === "contact" || action === "about")) {
+        // --- 2. NAVBAR CLICK TRICK (SKIP INTRO) ---
+        // Pre-position the camera so the animation starts instantly
         if (action === "projects" || action === "home") {
             state.zoom = 0;
             state.targetZoom = 0;
@@ -344,49 +237,24 @@ function revealScene() {
         }
         camera.lookAt(0, 0.8, -10);
 
+        // Clean up the URL so it looks professional (removes the ?action=)
         window.history.replaceState({}, document.title, window.location.pathname);
+
+        // Instantly trigger the correct TV text and logic
         handleSystemAction(action);
 
     } else {
-        // --- NORMAL FIRST-TIME LOAD ---
-        // Fade out loading screen and show the scene immediately
-        loadingScreen.style.opacity = "0";
-        setTimeout(() => {
-            loadingScreen.style.display = "none";
-            document.body.style.opacity = "1";
-            typeSentence("SYSTEM ONLINE.\n\nLOADING ARCHIVE...");
-        }, 500);
+        // --- 3. NORMAL FIRST-TIME LOAD ---
+        typeSentence("SYSTEM ONLINE.\n\nSCROLL TO BROWSE ARCHIVE.");
     }
 }
 
-// ✅ NEW: Called when tapes finish loading — enable scrolling and update CRT text
-function onTapesLoaded() {
-    state.scrollingEnabled = true;
-
-    // Only update the CRT text if we're in the normal load path (not returning/navbar)
-    const urlParams = new URLSearchParams(window.location.search);
-    const action = urlParams.get('action');
-    const returnIndex = localStorage.getItem('returnTapeIndex');
-
-    if (!action && returnIndex === null) {
-        // Small delay so it doesn't interrupt the "SYSTEM ONLINE" typing
-        setTimeout(() => {
-            typeSentence("ARCHIVE READY.\n\nSCROLL TO BROWSE.");
-        }, 2000);
-    } else {
-        // For navbar/return paths, just silently enable scrolling
-        state.scrollingEnabled = true;
-    }
-}
+const bootLoader = new GLTFLoader(bootManager);
+const tapeLoader = new GLTFLoader(tapeManager);
 
 
-// --- 6. LOAD MODELS ---
-// ✅ CHANGED: Use a plain GLTFLoader — no loadingManager
-// Critical assets (TV, table, background, slide) call onCriticalAssetLoaded()
-// Tapes load independently and call onTapesLoaded() when done
-const loader = new GLTFLoader();
 
-loader.load("models/slide.glb", gltf => {
+bootLoader.load("models/slide.glb", gltf => {
     slideModel = gltf.scene;
     slideModel.position.set(0, 0, 0);
     slideMixer = new THREE.AnimationMixer(slideModel);
@@ -407,12 +275,9 @@ loader.load("models/slide.glb", gltf => {
 
     slideModel.scale.set(0.0001, 0.0001, 0.0001);
     scene.add(slideModel);
-
-    // ✅ Slide counts as a critical asset
-    onCriticalAssetLoaded();
 });
 
-loader.load("models/tv.glb", gltf => {
+bootLoader.load("models/tv.glb", gltf => {
     tvModel = gltf.scene;
     tvModel.position.set(0, 0, 0);
 
@@ -424,21 +289,26 @@ loader.load("models/tv.glb", gltf => {
             if (c.name === "screen") {
                 c.material = crtShaderMaterial;
             } else {
+                // ✅ 1. Reference the existing material from the GLB
                 const mat = c.material;
 
+                // ✅ 2. Fix the color space for the Diffuse/Albedo map
                 if (mat.map) {
                     mat.map.colorSpace = THREE.SRGBColorSpace;
                 }
 
-                mat.roughness = 1.0;
-                mat.metalness = 0.0;
+                mat.roughness = 1.0; // Multiplier for your roughness map
+                mat.metalness = 0.0; // Keep at 0 for plastic, 1 for metal parts
                 
+                // If you want the normal map to be stronger/weaker:
                 if (mat.normalMap) {
                     mat.normalScale.set(1, 1); 
                 }
 
+                // ✅ 4. Handle Buttons (Interactable logic)
                 const name = (c.name || "").toLowerCase();
                 if (name.includes("button")) {
+                    // Clone so buttons can highlight individually
                     c.material = mat.clone();
                     c.userData.isInteractable = true;
                     c.userData.origEmissive = c.material.emissive.getHex();
@@ -449,58 +319,62 @@ loader.load("models/tv.glb", gltf => {
     });
 
     scene.add(tvModel);
-
-    // ✅ TV is critical
-    onCriticalAssetLoaded();
 });
 
-loader.load('models/background.glb', (gltf) => {
+// --- BACKGROUND GLTF LOADER ---
+bootLoader.load('models/background.glb', (gltf) => {
     const backdrop = gltf.scene;
     
+    
     backdrop.traverse((node) => {
+        // Target the specific mesh name from your Blender file
         if (node.isMesh && node.name === "background") {
-            node.material.emissiveIntensity = 1.0; 
-            node.material.depthWrite = false;
-            node.material.depthTest = true;
             
+            // 1. Force the material to ignore scene lighting 
+            // This ensures your custom gray-to-black gradient is perfectly clear
+            node.material.emissiveIntensity = 1.0; 
+            
+            // 2. Depth Settings: Keep it as the "furthest" layer
+            node.material.depthWrite = false;
+            node.material.depthTest = true; // Still allow foreground objects to hide it
+            
+            // 3. Color Accuracy
             if (node.material.map) {
                 node.material.map.colorSpace = THREE.SRGBColorSpace;
             }
         }
     });
 
+    // Move it to the back of the "void"
     backdrop.position.set(0, 0, -100);
-    backdrop.renderOrder = -100;
+    backdrop.renderOrder = -100; // Forces it to render first (behind everything)
 
     scene.add(backdrop);
-
-    // ✅ Background is critical
-    onCriticalAssetLoaded();
 });
-
-loader.load("models/table.glb", gltf => {
+// --- TABLE LOADER ---
+bootLoader.load("models/table.glb", gltf => {
     const table = gltf.scene;
     table.name = "table";
+    
+    // Position it so the top surface is at y: -0.3 
+    // (Where your tapes currently sit)
     table.position.set(0, -0.3, -5); 
     table.scale.set(1, 1, 1);
 
     table.traverse(c => {
         if (c.isMesh) {
             c.castShadow = true;
-            c.receiveShadow = true;
+            c.receiveShadow = true; // Crucial for the green glow to hit the wood/metal
+            
+            // Give it a slightly reflective "polished" finish
             c.material.roughness = 0.5;
             c.material.metalness = 0;
         }
     });
 
     scene.add(table);
-
-    // ✅ Table is critical
-    onCriticalAssetLoaded();
 });
-
-// ✅ TAPES: Loaded independently — do NOT block the scene reveal
-loader.load("models/tape.glb", gltf => {
+tapeLoader.load("models/tape.glb", gltf => {
     for (let i = 0; i < numTapes; i++) {
         const tape = gltf.scene.clone();
         const mixer = new THREE.AnimationMixer(tape);
@@ -530,6 +404,7 @@ loader.load("models/tape.glb", gltf => {
             action1: action1,
             action2: action2,
             projectInfo: projectData[i]
+            
         };
 
         tape.traverse(c => {
@@ -542,87 +417,41 @@ loader.load("models/tape.glb", gltf => {
         scene.add(tape);
         tapes.push(tape);
     }
-
-    // ✅ All tapes are in — enable scrolling
-    onTapesLoaded();
 });
 
 // --- BACKGROUND RETRO GRID ---
+// Parameters: size of grid, number of squares, center line color, grid color
 const gridSize = 60;
 const gridDivisions = 60;
-const gridColor = 0xaaaaaa;
+const gridColor = 0xaaaaaa; // Light grey/white to match your reference
 
 const bgGrid = new THREE.GridHelper(gridSize, gridDivisions, gridColor, gridColor);
+
+// By default, GridHelper lays flat on the floor. 
+// We rotate it 90 degrees to stand it up like a wall facing the camera.
 bgGrid.rotation.x = Math.PI / 2;
+
+// Push it way back behind the TV and the table
 bgGrid.position.set(0, 0, -15); 
+
+// Make it look subtle and retro (adjust opacity to taste)
 bgGrid.material.transparent = true;
 bgGrid.material.opacity = 0.15; 
+
+// If you want your bloom pass to make it glow slightly, keep this line:
 bgGrid.material.color.setHex(0xffffff); 
+
 scene.add(bgGrid);
 
-// --- 7. LOGIC & TEXT ---
+// --- 6. LOGIC & TEXT ---
 function toggleTVPower() {
     state.tvOn = !state.tvOn;
-    // ✅ Guard against tvModel being null
-    if (!tvModel) return;
     tvModel.traverse(c => {
         if (c.isMesh && c.name === "screen") c.material = state.tvOn ? crtShaderMaterial : blackMaterial;
     });
 }
 
-function updateTextCanvas() {
-    ctx.clearRect(0, 0, 512, 512);
-    
-    ctx.fillStyle = "#00ff00";
-    ctx.font = "bold 20px monospace";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-
-    const startX = 30;
-    let currentY = 30;
-    const lineHeight = 40;
-    const maxWidth = 452;
-
-    const textToDraw = currentText + (charIndex < fullGoalText.length ? "█" : "");
-    const lines = textToDraw.split('\n');
-
-    for (let i = 0; i < lines.length; i++) {
-        let line = lines[i];
-        let printLine = "";
-        
-        for(let j = 0; j < line.length; j++) {
-            let testLine = printLine + line[j];
-            
-            if(ctx.measureText(testLine).width > maxWidth) {
-                ctx.fillText(printLine, startX, currentY);
-                printLine = line[j];
-                currentY += lineHeight;
-            } else {
-                printLine = testLine;
-            }
-        }
-        ctx.fillText(printLine, startX, currentY);
-        currentY += lineHeight;
-    }
-
-    textTexture.needsUpdate = true;
-}
-
-function typeSentence(sentence) {
-    fullGoalText = sentence;
-    currentText = "";
-    charIndex = 0;
-    clearInterval(typingInterval);
-
-    typingInterval = setInterval(() => {
-        if (charIndex < fullGoalText.length) {
-            currentText += fullGoalText[charIndex++];
-            updateTextCanvas();
-        } else clearInterval(typingInterval);
-    }, 50);
-}
-
-// --- 8. EVENTS ---
+// --- 7. EVENTS ---
 window.addEventListener("mousemove", e => {
     mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
@@ -632,10 +461,9 @@ let scrollCooldown = false;
 const SCROLL_DELAY = 50;
 
 window.addEventListener("wheel", e => {
-    // ✅ Block scrolling until tapes are loaded
-    if (!state.scrollingEnabled) return;
     if (scrollCooldown) return;
 
+    // ✅ Use cached config
     const { radius } = cachedConfig;
 
     if (e.deltaY > 5) {
@@ -667,6 +495,7 @@ window.addEventListener("resize", () => {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 
+    // ✅ Only place we recompute config
     cachedConfig = getVisibleConfig();
     const { radius } = cachedConfig;
     state.targetScroll = THREE.MathUtils.clamp(state.targetScroll, radius, numTapes - 1 - radius);
@@ -675,22 +504,15 @@ window.addEventListener("resize", () => {
 
 window.addEventListener('click', () => {
 
-    console.log("Mouse Coords:", mouse.x.toFixed(2), mouse.y.toFixed(2));
-    console.log("Total Buttons Loaded:", interactables.length);
-    
     raycaster.setFromCamera(mouse, camera);
     
+    // 1. TEST BUTTONS
     const buttonHits = raycaster.intersectObjects(interactables, false);
-    console.log("Button Hits:", buttonHits.length);
 
+    // 2. TEST TAPES
     const visibleTapes = tapes.filter(t => t.visible);
     const tapeHits = raycaster.intersectObjects(visibleTapes, true);
-    console.log("Tape Hits:", tapeHits.length);
-
     if (state.zoom > 0.9 && state.activeTape && !state.isLocked) {
-        // ✅ Guard: only allow tape selection if tapes are fully loaded
-        if (!state.scrollingEnabled) return;
-
         state.isLocked = true;
         state.scrollSpeed = 0.03;
         state.selectedTape = state.activeTape;
@@ -699,7 +521,7 @@ window.addEventListener('click', () => {
         setTimeout(() => {
             const projectData = state.selectedTape.userData.projectInfo;
             openProjectPage(projectData);
-        }, 1500);
+        }, 1500); // Triggers 1.5s after the tape slides in
         
         const hov = state.selectedTape.userData.action1;
         const flip = state.selectedTape.userData.action2;
@@ -729,28 +551,32 @@ window.addEventListener('click', () => {
         return;
     }
 
+    // ✅ Raycast only against interactables, not the entire scene
     raycaster.setFromCamera(mouse, camera);
     const intersects = raycaster.intersectObjects(interactables, false);
 
+// Inside your click event listener, after the raycast:
     if (intersects.length > 0) {
         const obj = intersects[0].object;
         const name = obj.name.toLowerCase();
 
         if (name.includes("button")) {
+            // Press animation (Adjust Y/X/Z based on your model's orientation)
             obj.position.y -= 0.02; 
             setTimeout(() => obj.position.y += 0.02, 100);
 
+            // THE MAPPING FIX:
             if (name.includes("01")) handleSystemAction("power");
             if (name.includes("02")) handleSystemAction("home");
-            if (name.includes("03")) handleSystemAction("about");
-            if (name.includes("04")) handleSystemAction("projects");
-            if (name.includes("05")) handleSystemAction("contact");
+            if (name.includes("03")) handleSystemAction("about");    // Should zoom IN
+            if (name.includes("04")) handleSystemAction("projects"); // Should zoom OUT
+            if (name.includes("05")) handleSystemAction("contact");  // Should zoom IN
         }
     }
 });
-
 // --- THE MASTER CONTROLLER ---
 function handleSystemAction(action) {
+    // 1. GLOBAL EJECT (If a tape is currently playing, spit it out first)
     if (state.isLocked) {
         const hud = document.getElementById('project-hud');
         if (hud) hud.classList.remove('active');
@@ -759,7 +585,7 @@ function handleSystemAction(action) {
             const flip = state.selectedTape.userData.action2;
             if (flip) {
                 flip.paused = false;
-                flip.timeScale = -1;
+                flip.timeScale = -1; // Reverse to slide out
                 flip.play();
             }
         }
@@ -768,35 +594,31 @@ function handleSystemAction(action) {
         state.scrollSpeed = 0.1; 
     }
 
+    // 2. ROUTE THE ACTIONS
     switch (action) {
-        case "power":
+        case "power": // Button_01
             toggleTVPower();
             break;
 
-        case "home":
-            state.targetZoom = 0;
+        case "home": // Button_02
+            state.targetZoom = 0; // ZOOM OUT
             if (!state.tvOn) toggleTVPower();
             typeSentence("SYSTEM HOME...\n\nWELCOME TO THE ARCHIVE.");
             break;
 
-        case "about":
+        case "about": // Button_03
             state.targetZoom = 0;
             if (!state.tvOn) toggleTVPower();
             typeSentence("ABOUT SYSTEM...\n\nI AM A 3D DEVELOPER\nBUILDING INTERACTIVE WORLDS.");
             break;
 
-        case "projects":
-            state.targetZoom = 1;
+        case "projects": // Button_04
+            state.targetZoom = 1; // ZOOM OUT
             if (!state.tvOn) toggleTVPower();
-            // ✅ Different message depending on whether tapes are ready
-            typeSentence(
-                state.scrollingEnabled
-                    ? "PROJECT ARCHIVE...\n\nSELECT A TAPE BELOW."
-                    : "PROJECT ARCHIVE...\n\nLOADING TAPES..."
-            );
+            typeSentence("PROJECT ARCHIVE...\n\nSELECT A TAPE BELOW.");
             break;
 
-        case "contact":
+        case "contact": // Button_05
             state.targetZoom = 0;
             if (!state.tvOn) toggleTVPower();
             typeSentence("CONTACT PROTOCOL...\n\nEMAIL: hello@portfolio.com\nSIGNAL: SECURE");
@@ -804,6 +626,7 @@ function handleSystemAction(action) {
     }
 }
 
+// Helper for the Zoom-In sequence
 function triggerTVMenu(text) {
     if (state.targetZoom < 1) {
         state.targetZoom = 1;
@@ -816,13 +639,14 @@ function triggerTVMenu(text) {
         typeSentence(text);
     }
 }
-
 // --- PROJECT PAGE HANDLER ---
 function openProjectPage(data) {
     if (data && data.url) {
+        // 1. Fade the entire 3D screen to black
         document.body.style.transition = "opacity 0.5s ease";
         document.body.style.opacity = "0";
 
+        // 2. Wait for the fade to finish, then change the page
         setTimeout(() => {
             window.location.href = data.url;
         }, 500); 
@@ -833,35 +657,41 @@ function openProjectPage(data) {
     }
 }
 
-// --- 9. ANIMATE ---
+// --- 8. ANIMATE ---
 function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
+    
 
+    // ✅ Smooth zoom lerp
     state.zoom = THREE.MathUtils.lerp(state.zoom, state.targetZoom, 0.06);
+
+    // ✅ Fade bloom with zoom — no hard pop, free perf when zoomed out
+   // bloomPass.strength = THREE.MathUtils.lerp(bloomPass.strength, state.zoom < 0.5 ? 1.2 : 0.0, 0.05);
 
     if (slideMixer) slideMixer.update(delta);
 
+    // 1. SCROLL
     state.currentScroll = THREE.MathUtils.lerp(state.currentScroll, state.targetScroll, state.scrollSpeed);
 
-    const { radius } = cachedConfig;
+    const { radius } = cachedConfig; // ✅ cached
     const center = Math.round(state.currentScroll);
 
+    // 2. TAPE LOOP
     let currentFrameActiveTape = null;
     let currentFrameMinDist = 999;
 
     tapes.forEach((tape, i) => {
-        // ✅ Guard against partially-initialised tape slots
-        if (!tape) return;
-
         tape.visible = i >= center - radius && i <= center + radius;
 
+        // ✅ Only update mixer if tape is visible
         if (tape.visible && tape.userData.mixer) tape.userData.mixer.update(delta);
         if (!tape.visible) return;
 
         tape.position.x = (i - state.currentScroll) * tapeSpacing;
 
         if (state.zoom > 0.9) {
+            // ✅ Reuse tempVec — no GC pressure
             tape.getWorldPosition(tempVec);
             tempVec.project(camera);
 
@@ -881,11 +711,14 @@ function animate() {
     const tapeToOutline = state.selectedTape || state.activeTape;
 
     if (tapeToOutline) {
+        // It expects an array, so we wrap our tape in brackets
         outlinePass.selectedObjects = [tapeToOutline];
     } else {
+        // Clear the outline if nothing is selected/hovered
         outlinePass.selectedObjects = [];
     }
 
+    // 3. HOVER ANIMATION TRIGGERS
     if (!state.isLocked && state.activeTape !== state.previousTape) {
         const hoverUI = document.getElementById('tape-hover-ui');
         if (state.previousTape?.userData.action1) {
@@ -913,13 +746,12 @@ function animate() {
         state.previousTape = state.activeTape;
     }
 
+  // 4. CRT RENDER — ✅ skip when TV is off
     if (state.tvOn) {
-        crtShaderMaterial.uniforms.uTime.value += 0.01;
-        renderer.setRenderTarget(renderTarget);
-        renderer.render(tvScene, tvCamera);
-        renderer.setRenderTarget(null);
+        renderCRT(renderer);
     }
 
+    // 5. CAMERA
     const targetX = THREE.MathUtils.lerp(POS_START.x, POS_END.x, state.zoom);
     const targetY = THREE.MathUtils.lerp(POS_START.y, POS_END.y, state.zoom);
     const targetZ = THREE.MathUtils.lerp(POS_START.z, POS_END.z, state.zoom);
@@ -929,6 +761,7 @@ function animate() {
     camera.position.z = THREE.MathUtils.lerp(camera.position.z, targetZ, 0.04);
     camera.lookAt(0, 0.8, -10);
 
+    // 6. CURSOR & HIGHLIGHT — ✅ single raycaster call against interactables only
     if (!state.isLocked) {
         let cursorStyle = "default";
         let currentHitObj = null;
@@ -963,5 +796,4 @@ function animate() {
     composer.render();
 }
 
-// ✅ NOTE: animate() is no longer called here at the bottom.
-// It is called inside revealScene() once critical assets are ready.
+animate();
