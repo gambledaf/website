@@ -8,17 +8,6 @@ import { setupSceneLights } from './js/lights.js';
 import { projectData } from './js/files.js';
 import { crtShaderMaterial, typeSentence, renderCRT, setScreenTextInstant } from './js/crt.js';
 
-// Back/forward cache can restore an in-between transition frame (e.g. tape flip + LOADING PROJECT).
-// Force a clean re-init when returning via browser history.
-window.addEventListener('pageshow', (event) => {
-    const navEntry = performance.getEntriesByType('navigation')[0];
-    const cameFromHistory = event.persisted || (navEntry && navEntry.type === 'back_forward');
-
-    if (cameFromHistory) {
-        window.location.reload();
-    }
-});
-
 // --- 1. SHARED HELPERS & STATE ---
 function getVisibleConfig() {
     let base = Math.floor(window.innerWidth / 240);
@@ -73,8 +62,24 @@ const renderer = new THREE.WebGLRenderer({
     antialias: true,
     alpha: true
 });
+
+const perfProfile = (() => {
+    const cores = navigator.hardwareConcurrency || 8;
+    const memory = navigator.deviceMemory || 8;
+    const smallScreen = Math.min(window.innerWidth, window.innerHeight) < 800;
+    const lowEnd = cores <= 4 || memory <= 4 || smallScreen;
+
+    return {
+        lowEnd,
+        pixelRatioCap: lowEnd ? 1.25 : 2,
+        bloomScale: lowEnd ? 0.5 : 0.75,
+        outlineScale: lowEnd ? 0.35 : 0.5,
+        warmupCompile: !lowEnd
+    };
+})();
+
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, perfProfile.pixelRatioCap));
 
 
 renderer.shadowMap.enabled = true;
@@ -93,23 +98,23 @@ const composer = new EffectComposer(renderer, hdrRenderTarget);
 composer.addPass(renderPass);
 
 const bloomPass = new UnrealBloomPass(
-    // ✅ Bloom at 75% resolution — visually identical, meaningfully cheaper
-    new THREE.Vector2(window.innerWidth * 0.75, window.innerHeight * 0.75),
+    // Adaptive bloom resolution: lighter on lower-end devices.
+    new THREE.Vector2(window.innerWidth * perfProfile.bloomScale, window.innerHeight * perfProfile.bloomScale),
     3,
     0.5,
     1.2
 );
 composer.addPass(bloomPass);
 // --- NEW: OPTIMIZED OUTLINE PASS ---
-// Running at 50% resolution to save performance
+// Adaptive outline resolution to improve startup/render cost.
 const outlinePass = new OutlinePass(
-    new THREE.Vector2(window.innerWidth * 0.5, window.innerHeight * 0.5),
+    new THREE.Vector2(window.innerWidth * perfProfile.outlineScale, window.innerHeight * perfProfile.outlineScale),
     scene,
     camera
 );
 
 // Performance tweak
-outlinePass.downSampleRatio = 2; 
+outlinePass.downSampleRatio = perfProfile.lowEnd ? 3 : 2; 
 
 // Visual styling (Retro green to match your CRT)
 outlinePass.edgeStrength = 4.0;
@@ -117,6 +122,12 @@ outlinePass.edgeGlow = 1.0;
 outlinePass.edgeThickness = 2.0;
 outlinePass.visibleEdgeColor.set(0x00ff44); 
 outlinePass.hiddenEdgeColor.set(0x002200);
+
+if (perfProfile.lowEnd) {
+    outlinePass.edgeStrength = 2.4;
+    outlinePass.edgeGlow = 0.65;
+    outlinePass.edgeThickness = 1.5;
+}
 
 composer.addPass(outlinePass);
 setupSceneLights(scene);
@@ -196,14 +207,10 @@ bootManager.onLoad = () => {
     bootComplete = true;
     state.bootComplete = true;
 
-    // Pre-compile the 3D room in the background
-    camera.position.set(POS_END.x, POS_END.y, POS_END.z);
-    camera.lookAt(0, 0.8, -10);
-    composer.render();
-    camera.position.set(POS_START.x, POS_START.y, POS_START.z);
-    camera.lookAt(0, 0.8, -10);
-    composer.render();
-    setTimeout(() => renderer.compile(scene, camera), 100);
+    // Warm-up compile only on stronger devices to avoid startup stalls.
+    if (perfProfile.warmupCompile && !shouldQuickResume) {
+        setTimeout(() => renderer.compile(scene, camera), 250);
+    }
 
     if (shouldQuickResume && loadingScreen) {
         clearInterval(progressInterval);
@@ -253,7 +260,7 @@ const progressInterval = setInterval(() => {
     if (displayedProgress >= 100 && bootFinished) {
         clearInterval(progressInterval); // Kill the visual engine
 
-        // Pause for just 200ms (1/5th of a second) so it doesn't look like a glitch
+        // Keep a very short pause so completion looks intentional without feeling slow.
         setTimeout(() => {
             loadingScreen.style.opacity = "0";
             
@@ -266,8 +273,8 @@ const progressInterval = setInterval(() => {
                 } else {
                     runFinalLoadStateOnce();
                 }
-            }, 800); // Wait for the CSS fade transition to end
-        }, 200); 
+            }, 380); // Match the faster loading-screen fade.
+        }, 80); 
     }
 }, 30);
 
@@ -597,12 +604,16 @@ window.addEventListener("resize", () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, perfProfile.pixelRatioCap));
 
     // ✅ Only place we recompute config
     cachedConfig = getVisibleConfig();
     const { radius } = cachedConfig;
     state.targetScroll = THREE.MathUtils.clamp(state.targetScroll, radius, numTapes - 1 - radius);
-    outlinePass.resolution.set(window.innerWidth * 0.5, window.innerHeight * 0.5);
+    outlinePass.resolution.set(
+        window.innerWidth * perfProfile.outlineScale,
+        window.innerHeight * perfProfile.outlineScale
+    );
 });
 
 window.addEventListener('click', () => {
