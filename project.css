@@ -88,19 +88,25 @@ body {
 /* --- THE SCROLLING GRID --- */
 .project-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    /* Size threshold: cards never get too small and variation stays controlled */
+    --tile-min: clamp(280px, 20vw, 360px);
+    grid-template-columns: repeat(auto-fit, minmax(var(--tile-min), var(--tile-min)));
     grid-auto-flow: dense; /* MAGIC: This forces smaller items to fill empty gaps automatically! */
     grid-auto-rows: auto;
     gap: 24px;
     padding: 20px;
     overflow-y: auto; 
     height: 100%;
+    width: fit-content;
+    max-width: 100%;
+    margin: 0 auto;
     align-content: start;
     background-image:
         linear-gradient(rgba(var(--term-light-rgb), 0.06) 1px, transparent 1px),
         linear-gradient(90deg, rgba(var(--term-light-rgb), 0.06) 1px, transparent 1px);
     background-size: 26px 26px;
     align-items: start;
+    justify-content: center;
 }
 
 /* --- MEDIA MODULES (Base Styling) --- */
@@ -151,6 +157,20 @@ body {
 
 .project-grid > .media-module:not(.video-module) .image-frame {
     aspect-ratio: auto;
+    min-height: clamp(150px, 16vw, 240px);
+    max-height: clamp(260px, 34vw, 420px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.project-grid > .media-module:not(.video-module):nth-child(odd) {
+    transform: translateY(-4px);
+}
+
+.project-grid > .media-module:not(.video-module):nth-child(even) {
+    transform: translateY(6px);
 }
 
 /* Pattern repeats every 10 modules to feel random but still pack tightly */
@@ -161,37 +181,37 @@ body {
 
 .project-grid > .media-module:not(.video-module):nth-child(10n + 2) {
     --module-span: 1;
-    --module-ratio: 3 / 4;
+    --module-ratio: 2 / 3;
 }
 
 .project-grid > .media-module:not(.video-module):nth-child(10n + 3) {
-    --module-span: 1;
-    --module-ratio: 1 / 1;
+    --module-span: 2;
+    --module-ratio: 5 / 3;
 }
 
 .project-grid > .media-module:not(.video-module):nth-child(10n + 4) {
     --module-span: 1;
-    --module-ratio: 5 / 4;
+    --module-ratio: 3 / 4;
 }
 
 .project-grid > .media-module:not(.video-module):nth-child(10n + 5) {
-    --module-span: 1;
-    --module-ratio: 4 / 5;
-}
-
-.project-grid > .media-module:not(.video-module):nth-child(10n + 6) {
-    --module-span: 1;
-    --module-ratio: 5 / 4;
-}
-
-.project-grid > .media-module:not(.video-module):nth-child(10n + 7) {
     --module-span: 2;
     --module-ratio: 21 / 9;
 }
 
+.project-grid > .media-module:not(.video-module):nth-child(10n + 6) {
+    --module-span: 1;
+    --module-ratio: 1 / 1;
+}
+
+.project-grid > .media-module:not(.video-module):nth-child(10n + 7) {
+    --module-span: 2;
+    --module-ratio: 4 / 3;
+}
+
 .project-grid > .media-module:not(.video-module):nth-child(10n + 8) {
     --module-span: 1;
-    --module-ratio: 16 / 10;
+    --module-ratio: 4 / 5;
 }
 
 .project-grid > .media-module:not(.video-module):nth-child(10n + 9) {
@@ -201,19 +221,7 @@ body {
 
 .project-grid > .media-module:not(.video-module):nth-child(10n + 10) {
     --module-span: 1;
-    --module-ratio: 2 / 3;
-}
-
-@media (min-width: 1800px) {
-    .project-grid {
-        grid-template-columns: repeat(5, 1fr);
-    }
-}
-
-@media (max-width: 1280px) {
-    .project-grid {
-        grid-template-columns: repeat(3, 1fr);
-    }
+    --module-ratio: 5 / 4;
 }
 
 /* Base Frame Styling */
@@ -252,12 +260,13 @@ body {
 
 @media (max-width: 980px) {
     .project-grid {
-        grid-template-columns: repeat(2, 1fr);
+        --tile-min: 260px;
         gap: 20px;
     }
 
     .project-grid > .media-module:not(.video-module) {
         --module-span: 1;
+        transform: none;
     }
 }
 
@@ -283,7 +292,7 @@ body {
 
 /* Keep image previews uncropped and preserve original image proportions */
 .image-frame .scalable-media {
-    height: auto;
+    height: 100%;
     object-fit: contain;
 }
 
@@ -316,14 +325,18 @@ body {
 /* --- THE VIDEO MODULE (Spans the bottom) --- */
 .video-module {
     grid-column: 1 / -1; 
-    max-width: 1200px; /* <-- INCREASED FROM 800px */
+    max-width: none;
     width: 100%;
     margin: 40px auto 20px auto; 
     border-top: 1px dashed var(--term-light);
     padding-top: 30px;
     box-shadow: 0 -10px 20px -14px rgba(var(--term-light-rgb), 0.6);
 }
-.video-frame { aspect-ratio: 16/9; } 
+.video-frame {
+    aspect-ratio: 16/9;
+    max-width: 1200px;
+    margin: 0 auto;
+}
 .top-desc { 
     margin-bottom: 15px; border-left: none; 
     border-right: 3px solid var(--term-light); 

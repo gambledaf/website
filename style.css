@@ -358,9 +358,10 @@ body {
     background: transparent;
     border: none;
     box-shadow: none;
-    z-index: 9999;
+    z-index: 200;
     box-sizing: border-box;
     font-family: 'HackerTerminal', 'VT323', 'Courier New', monospace;
+    transition: transform 0.3s ease, opacity 0.2s ease;
 }
 
 /* --- THE LOGO AREA --- */
@@ -368,11 +369,19 @@ body {
     position: fixed;
     top: var(--logo-top);
     left: var(--logo-left);
-    z-index: 10000;
+    right: auto;
+    z-index: 201;
     color: var(--crt-green);
     font-size: 1.35rem;
     text-shadow: 0 0 6px rgba(var(--crt-green-rgb), 0.45);
     letter-spacing: 0.8px;
+    transition: transform 0.3s ease, opacity 0.2s ease;
+}
+
+.retro-header.nav-is-hidden,
+.retro-logo.nav-is-hidden {
+    opacity: 0;
+    pointer-events: none;
 }
 
 .retro-logo-image {

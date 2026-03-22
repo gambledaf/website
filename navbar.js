@@ -9,11 +9,11 @@ const basePath = inSubfolder ? '../' : '';
 const navHTML = `
   <div class="crt-overlay"></div>
 
+    <div class="retro-logo" id="nav-logo" style="cursor: pointer;">
+            <img src="${basePath}images/logo.svg" alt="My Logo" class="retro-logo-image">
+    </div>
+
   <header class="retro-header">
-      <div class="retro-logo" id="nav-logo" style="cursor: pointer;">
-          <img src="${basePath}images/logo.svg" alt="My Logo" class="retro-logo-image">
-      </div>
-      
       <nav class="retro-nav-links">
           <a href="#" id="nav-home">SYS.HOME</a>
           <a href="#" id="nav-about">USR.ABOUT</a>
@@ -24,6 +24,36 @@ const navHTML = `
 `;
 
 document.body.insertAdjacentHTML('afterbegin', navHTML);
+
+// Browser back/forward can restore a page with old inline opacity from fade-out transitions.
+// Force visible state whenever the page is shown again (including bfcache restores).
+function resetBodyVisibility() {
+    document.body.style.opacity = '1';
+}
+
+resetBodyVisibility();
+window.addEventListener('pageshow', resetBodyVisibility);
+
+// Keep navbar hidden while loading screen is active.
+const loadingScreen = document.getElementById('loading-screen');
+const navbarEl = document.querySelector('.retro-header');
+const logoEl = document.querySelector('.retro-logo');
+
+function syncNavbarLoadingVisibility() {
+    if (!navbarEl || !logoEl) return;
+
+    const loadingVisible = !!loadingScreen && getComputedStyle(loadingScreen).display !== 'none' && getComputedStyle(loadingScreen).opacity !== '0';
+
+    navbarEl.classList.toggle('nav-is-hidden', loadingVisible);
+    logoEl.classList.toggle('nav-is-hidden', loadingVisible);
+}
+
+syncNavbarLoadingVisibility();
+
+if (loadingScreen) {
+    const loadingObserver = new MutationObserver(syncNavbarLoadingVisibility);
+    loadingObserver.observe(loadingScreen, { attributes: true, attributeFilter: ['style', 'class'] });
+}
 
 // --- 3. THE SMART CLICK LOGIC ---
 function handleNavClick(e, action) {
@@ -51,3 +81,21 @@ document.getElementById('nav-contact').addEventListener('click', (e) => handleNa
 
 // Make clicking the logo take you home, just like before
 document.getElementById('nav-logo').addEventListener('click', (e) => handleNavClick(e, "home"));
+
+// Shared scroll hide/show behavior for both navbar links and standalone logo
+let lastScrollY = window.scrollY;
+window.addEventListener('scroll', () => {
+    const navbar = document.querySelector('.retro-header');
+    const logo = document.querySelector('.retro-logo');
+    const shouldHide = window.scrollY > lastScrollY && window.scrollY > 50;
+
+    if (navbar) {
+        navbar.style.transform = shouldHide ? 'translateY(-100%)' : 'translateY(0)';
+    }
+
+    if (logo) {
+        logo.style.transform = shouldHide ? 'translateY(-100%)' : 'translateY(0)';
+    }
+
+    lastScrollY = window.scrollY;
+});
