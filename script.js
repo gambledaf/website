@@ -8,6 +8,17 @@ import { setupSceneLights } from './js/lights.js';
 import { projectData } from './js/files.js';
 import { crtShaderMaterial, typeSentence, renderCRT, setScreenTextInstant } from './js/crt.js';
 
+// Back/forward cache can restore an in-between transition frame (e.g. tape flip + LOADING PROJECT).
+// Force a clean re-init when returning via browser history.
+window.addEventListener('pageshow', (event) => {
+    const navEntry = performance.getEntriesByType('navigation')[0];
+    const cameFromHistory = event.persisted || (navEntry && navEntry.type === 'back_forward');
+
+    if (cameFromHistory) {
+        window.location.reload();
+    }
+});
+
 // --- 1. SHARED HELPERS & STATE ---
 function getVisibleConfig() {
     let base = Math.floor(window.innerWidth / 240);
