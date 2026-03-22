@@ -32,17 +32,46 @@ export const crtShaderMaterial = new THREE.ShaderMaterial({
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); 
         }
     `,
-    fragmentShader: `
+ fragmentShader: `
         uniform sampler2D tDiffuse; 
         uniform float uTime; 
         varying vec2 vUv;
+
         void main() {
+            // 1. THE CRT BULGE (Warping the screen shape)
             vec2 uv = vUv;
+            uv -= 0.5; // Shift to center
+            float rsq = uv.x * uv.x + uv.y * uv.y; // Distance squared
+            uv += uv * rsq * 0.15; // Multiply by bulge strength
+            uv += 0.5; // Shift back
+
+            // If the bulge pushes coordinates off the edge, render pure black bezel shadow
+            if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+                gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+                return;
+            }
+
+            // 2. THE BASE SCREEN COLOR (Greyish-green tube)
+            vec3 baseColor = vec3(0.15, 0.18, 0.15); 
+
+            // 3. THE VIGNETTE (Darker corners for depth)
+            float dist = distance(vUv, vec2(0.5, 0.5));
+            float vignette = smoothstep(0.8, 0.2, dist); 
+            baseColor *= vignette;
+
+            // 4. THE GLOWING TEXT
             vec4 tex = texture2D(tDiffuse, uv);
-            float movingLines = fract(uv.y * 25.0 - uTime * 0.8);
-            float scanline = step(0.1, movingLines);
-            vec3 finalColor = tex.rgb * scanline;
-            gl_FragColor = vec4(finalColor * 2.5, 2.5);
+            vec3 textColor = tex.rgb * vec3(0.2, 1.0, 0.2); // Neon green glow
+
+            // 5. FINAL MIX (Scanlines removed!)
+            // Just combine the dusty base color with the bright text
+            vec3 finalColor = baseColor + (textColor * 2.0);
+
+            // Add a tiny bit of screen flicker so it still feels alive
+            float flicker = 0.98 + 0.03 * sin(uTime * 15.0);
+            finalColor *= flicker;
+
+            gl_FragColor = vec4(finalColor, 1.0);
         }
     `
 });

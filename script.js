@@ -22,7 +22,10 @@ const tapes = [];
 
 const numTapes = projectData.length;
 const tapeSpacing = 0.55;
-const initialCenter = (numTapes - 1) / 2;
+// Start at the first visible window (e.g. 0..8 when 9 tapes are visible), not mid-list.
+const initialCenter = numTapes > 0
+    ? Math.min(cachedConfig.radius, (numTapes - 1) / 2)
+    : 0;
 
 const state = {
     zoom: 0,
@@ -65,6 +68,9 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1;
 
 const hdrRenderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
     type: THREE.HalfFloatType,
@@ -78,7 +84,7 @@ composer.addPass(renderPass);
 const bloomPass = new UnrealBloomPass(
     // ✅ Bloom at 75% resolution — visually identical, meaningfully cheaper
     new THREE.Vector2(window.innerWidth * 0.75, window.innerHeight * 0.75),
-    2,
+    3,
     0.5,
     1.2
 );
@@ -128,52 +134,138 @@ const tapeManager = new THREE.LoadingManager(); // Separate manager for tapes
 const loadingScreen = document.getElementById("loading-screen");
 const loadingText = document.getElementById("loading-text");
 
+const startupParams = new URLSearchParams(window.location.search);
+const shouldQuickResume =
+    sessionStorage.getItem('skipBootLoader') === '1' ||
+    localStorage.getItem('returnTapeIndex') !== null ||
+    startupParams.has('action');
+
 let bootComplete = false;
 let tapesComplete = false;
+let finalStateHandled = false;
 
-// 1. BOOT SEQUENCE (UI & Environment)
+/// --- SMART HACKER LOADING ENGINE ---
+const progressBarFill = document.getElementById("progress-bar");
+const loadingTextEl = document.getElementById("loading-text");
+
+let targetProgress = 0;
+let displayedProgress = 0;
+let bootFinished = false; // Tracks the REAL download status
+
+if (shouldQuickResume) {
+    if (loadingTextEl) loadingTextEl.innerText = "RESUMING ARCHIVE...";
+    if (progressBarFill) progressBarFill.style.width = "92%";
+    displayedProgress = 92;
+}
+
+function runFinalLoadStateOnce() {
+    if (finalStateHandled) return;
+    finalStateHandled = true;
+    handleFinalLoadState();
+}
+
+const loadingPhrases = [
+    "ESTABLISHING SECURE CONNECTION...",
+    "BYPASSING MAINFRAME...",
+    "DECRYPTING ARCHIVES...",
+    "ASSEMBLING SCENE DATA...",
+    "INITIALIZING CRT OVERRIDE...",
+    "SYSTEM READY."
+];
+
+// 1. The REAL download progress sets the target
 bootManager.onProgress = (url, itemsLoaded, itemsTotal) => {
-    const progress = Math.floor((itemsLoaded / itemsTotal) * 100);
-    loadingText.innerText = `BOOTING... ${progress}%`;
+    targetProgress = (itemsLoaded / itemsTotal) * 100;
 };
 
+// 2. The REAL download finishes
 bootManager.onLoad = () => {
+    targetProgress = 100;
+    bootFinished = true; // Signal the engine that it's safe to exit
     bootComplete = true;
-    loadingText.innerText = "SIGNAL ACQUIRED";
-    
-    // Jump cut the camera to render the scene once
+    state.bootComplete = true;
+
+    // Pre-compile the 3D room in the background
     camera.position.set(POS_END.x, POS_END.y, POS_END.z);
     camera.lookAt(0, 0.8, -10);
     composer.render();
-
     camera.position.set(POS_START.x, POS_START.y, POS_START.z);
     camera.lookAt(0, 0.8, -10);
     composer.render();
-    
     setTimeout(() => renderer.compile(scene, camera), 100);
 
-    setTimeout(() => {
-        // Fade out DOM loading screen
+    if (shouldQuickResume && loadingScreen) {
+        clearInterval(progressInterval);
+        sessionStorage.removeItem('skipBootLoader');
         loadingScreen.style.opacity = "0";
+
         setTimeout(() => {
             loadingScreen.style.display = "none";
             document.body.style.opacity = "1";
-            
-            // Check if tapes are already done, otherwise show syncing
+
             if (!tapesComplete) {
                 setScreenTextInstant("SYNCING ARCHIVES...\nPLEASE WAIT");
             } else {
-                handleFinalLoadState();
+                runFinalLoadStateOnce();
             }
-        }, 800);
-    }, 500);
+        }, 120);
+    }
 };
+
+// 3. The Visual Engine (Runs every 30ms)
+const progressInterval = setInterval(() => {
+    
+    // Animate the bar catching up to the real download
+    if (displayedProgress < targetProgress) {
+        
+        if (bootFinished) {
+            // If the files loaded instantly, sprint to 100% to get out of the user's way
+            displayedProgress += 15; 
+        } else {
+            // Otherwise, chase the download speed smoothly with a tiny hacker "jitter"
+            displayedProgress += (targetProgress - displayedProgress) * 0.15;
+            displayedProgress += Math.random() * 2;
+        }
+
+        if (displayedProgress > targetProgress) displayedProgress = targetProgress;
+
+        // Update DOM
+        if (progressBarFill) progressBarFill.style.width = `${displayedProgress}%`;
+
+        let phraseIndex = Math.floor((displayedProgress / 100) * (loadingPhrases.length - 1));
+        if (loadingTextEl) {
+            loadingTextEl.innerText = `${loadingPhrases[phraseIndex]} [${Math.floor(displayedProgress)}%]`;
+        }
+    }
+
+    // 4. Trigger the fade ONLY when both the visual bar AND the real download are 100%
+    if (displayedProgress >= 100 && bootFinished) {
+        clearInterval(progressInterval); // Kill the visual engine
+
+        // Pause for just 200ms (1/5th of a second) so it doesn't look like a glitch
+        setTimeout(() => {
+            loadingScreen.style.opacity = "0";
+            
+            setTimeout(() => {
+                loadingScreen.style.display = "none";
+                document.body.style.opacity = "1";
+                
+                if (!tapesComplete) {
+                    setScreenTextInstant("SYNCING ARCHIVES...\nPLEASE WAIT");
+                } else {
+                    runFinalLoadStateOnce();
+                }
+            }, 800); // Wait for the CSS fade transition to end
+        }, 200); 
+    }
+}, 30);
 
 // 2. TAPE SEQUENCE (Background downloading)
 tapeManager.onLoad = () => {
     tapesComplete = true;
+    state.tapesComplete = true;
     if (bootComplete) {
-        handleFinalLoadState();
+        runFinalLoadStateOnce();
     }
 };
 
@@ -251,7 +343,7 @@ function handleFinalLoadState() {
 
 const bootLoader = new GLTFLoader(bootManager);
 const tapeLoader = new GLTFLoader(tapeManager);
-
+window.handleSystemAction = handleSystemAction;
 
 
 bootLoader.load("models/slide.glb", gltf => {
@@ -297,7 +389,7 @@ bootLoader.load("models/tv.glb", gltf => {
                     mat.map.colorSpace = THREE.SRGBColorSpace;
                 }
 
-                mat.roughness = 1.0; // Multiplier for your roughness map
+                mat.roughness = 1; // Multiplier for your roughness map
                 mat.metalness = 0.0; // Keep at 0 for plastic, 1 for metal parts
                 
                 // If you want the normal map to be stronger/weaker:
@@ -642,6 +734,8 @@ function triggerTVMenu(text) {
 // --- PROJECT PAGE HANDLER ---
 function openProjectPage(data) {
     if (data && data.url) {
+        sessionStorage.setItem('skipBootLoader', '1');
+
         // 1. Fade the entire 3D screen to black
         document.body.style.transition = "opacity 0.5s ease";
         document.body.style.opacity = "0";

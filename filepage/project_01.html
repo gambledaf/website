@@ -2,24 +2,98 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Project 01</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARCHIVE // DESIGN_01</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    
     <link rel="stylesheet" href="../style.css"> 
+    
+    <link rel="stylesheet" href="../project.css"> 
 </head>
 <body>
 
-    <a href="../index.html" class="back-btn" id="eject-btn">■ EJECT & RETURN</a>
+    <main class="crt-window">
+        
+        <header class="window-header">
+            <span class="glitch-text">> ARCHIVE_FILE: DESIGN_01.DAT</span>
+            <span>[ STATUS: DECRYPTED ]</span>
+        </header>
+
+        <div class="project-grid">
+
+            <div class="media-module">
+                <div class="image-frame">
+                    <img src="https://picsum.photos/1920/1080?random=1" alt="Project Image 1" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: PRIMARY_VISUAL</p>
+                    <p>> NOTES: Structural integrity confirmed. Color grading matches expected parameters.</p>
+                </div>
+            </div>
+
+            <div class="media-module">
+                <div class="image-frame">
+                    <img src="https://picsum.photos/800/600?random=2" alt="Project Image 2" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: SECONDARY_VISUAL</p>
+                    <p>> NOTES: Alternate angle. Notice the geometric framing and harsh lighting contrast.</p>
+                </div>
+            </div>
+
+              <div class="media-module">
+                <div class="image-frame">
+                    <img src="https://picsum.photos/800/600?random=2" alt="Project Image 2" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: SECONDARY_VISUAL</p>
+                    <p>> NOTES: Alternate angle. Notice the geometric framing and harsh lighting contrast.</p>
+                </div>
+            </div>
+              <div class="media-module">
+                <div class="image-frame">
+                    <img src="https://picsum.photos/800/600?random=2" alt="Project Image 2" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: SECONDARY_VISUAL</p>
+                    <p>> NOTES: Alternate angle. Notice the geometric framing and harsh lighting contrast.</p>
+                </div>
+            </div>
+
+              <div class="media-module">
+                <div class="image-frame">
+                    <img src="https://picsum.photos/800/600?random=2" alt="Project Image 2" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: SECONDARY_VISUAL</p>
+                    <p>> NOTES: Alternate angle. Notice the geometric framing and harsh lighting contrast.</p>
+                </div>
+            </div>
+
+
+
+            <div class="media-module video-module">
+                <div class="module-desc top-desc">
+                    <p>> ELEMENT: MOTION_TEST_FINAL</p>
+                    <p>> PLAYBACK: INITIALIZING...</p>
+                </div>
+                <div class="video-frame">
+                    <iframe src="https://www.youtube.com/embed/jNQXAC9IVRw?autoplay=0&mute=1" 
+                            class="scalable-media" frameborder="0" allowfullscreen>
+                    </iframe>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <div id="lightbox" class="lightbox-overlay" style="display: none;">
+        <span id="close-lightbox">[X]</span>
+        <img id="lightbox-img" src="" alt="Full Screen">
+    </div>
 
     <script src="../navbar.js"></script>
-
-    <script>
-        // Optional: Your Eject & Return memory script from earlier, updated with ../
-        document.getElementById('eject-btn').addEventListener('click', (e) => {
-            e.preventDefault();
-            localStorage.setItem('returnTapeIndex', 0); // Use 0 for project_01, 1 for project_02
-            document.body.style.transition = "opacity 0.5s ease";
-            document.body.style.opacity = "0";
-            setTimeout(() => { window.location.href = "../index.html"; }, 500);
-        });
-    </script>
+    <script src="../js/project.js"></script> 
 </body>
 </html>

@@ -9,8 +9,39 @@
 </head>
 <body>
 
-  <div id="loading-screen">
-    <div id="loading-text">LOADING... 0%</div>
+<div id="loading-screen">
+    
+    <div class="scanline-bar"></div>
+
+    <div class="monitor-frame">
+        
+        <div class="terminal-text">
+            <p>&gt; The name of your OVERSEER today is: Giorgi</p>
+            <p>&gt; Thoughtcrimes commited today: 0</p>
+        </div>
+
+        <div class="center-content">
+
+                <div class="logo-wrapper image-mode">
+                    <div class="styled-logo-image" style="-webkit-mask-image: url('images/my_logo.png'); mask-image: url('images/my_logo.png');"></div>
+                </div>
+
+            <div class="neon-divider"></div>
+
+            <div class="progress-container">
+                <p id="loading-text">Syncing Archives..</p>
+                <div class="progress-box">
+                    <div id="progress-bar" class="progress-fill" style="width: 35%;"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bottom-footer">
+            <p class="tagline">'Innovate, Don't Be Evil'</p>
+            
+        </div>
+
+    </div>
 </div>
 <div id="tape-hover-ui">
     <div class="hud-line">
@@ -23,6 +54,7 @@
         //
     </div>
 </div>
+
 
   <canvas id="bg-canvas"></canvas>
     

@@ -5,6 +5,12 @@
   padding: 0;
   font-family: 'Arial', sans-serif; /* We can change this to a custom font later */
 }
+@font-face {
+    font-family: 'RechargeBold'; /* You can name this whatever you want */
+    src: url('C:\Windows\Fonts\RechargeBold.ttf') format('otf');
+    font-weight: normal;
+    font-style: normal;
+}
 #bg-canvas {
   position: absolute; /* Breaks it out of the normal HTML flow */
   top: 0;
@@ -18,27 +24,208 @@
 body {
   background-color: #0a0a0a; 
 }
+/* --- 1984 OVERSEER LOADING SCREEN STYLES --- */
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
 #loading-screen {
     position: fixed;
     top: 0;
     left: 0;
     width: 100vw;
     height: 100vh;
-    background-color: #0a0a0a; /* Matches your Three.js scene background */
-    z-index: 9999; /* Keeps it on top of everything */
+    background-color: #030c08; 
+    z-index: 9999;
     display: flex;
     justify-content: center;
     align-items: center;
-    transition: opacity 0.8s ease-out; /* Smooth fade when done */
-    pointer-events: none;
+    padding: 2rem;
+    box-sizing: border-box;
+    background: radial-gradient(circle at center, #051a11 0%, #010604 100%);
+    transition: opacity 0.8s ease;
+    overflow: hidden; /* Keeps the moving scanlines from breaking the page */
 }
 
-#loading-text {
-    color: #00ff00;
-    font-family: monospace;
-    font-size: 24px;
-    font-weight: bold;
-    letter-spacing: 2px;
+/* 1. Global Fine CRT Pixel Grid (Static Overlay) */
+#loading-screen::after {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 0, 0, 0.4) 2px,
+        rgba(0, 0, 0, 0.4) 4px
+    );
+    pointer-events: none;
+    z-index: 10; /* Places it over everything so the text gets sliced natively */
+}
+
+/* 2. Moving Thick Scanline Bar */
+.scanline-bar {
+    position: absolute;
+    top: -100px;
+    left: 0;
+    width: 100%;
+    height: 150px;
+    background: linear-gradient(to bottom, transparent, rgba(0, 255, 68, 0.15), transparent);
+    animation: scanline-scroll 6s linear infinite;
+    pointer-events: none;
+    z-index: 11;
+}
+
+@keyframes scanline-scroll {
+    0% { transform: translateY(-100vh); }
+    100% { transform: translateY(200vh); }
+}
+
+/* --- Glowing Divider Line --- */
+.neon-divider {
+    width: 900px;           /* Matches the width of your progress box */
+    height: 2px;            /* Thickness of the line */
+    background-color: #00ff44;
+    
+    /* The double-layered CRT glow */
+    box-shadow: 0 0 10px #00ff44, 0 0 20px #00ff44; 
+    
+    /* Spacing: 30px push down from the logo, 30px push up from the text */
+    margin-top: -50px; 
+    margin-bottom: 200px; 
+}
+
+/* The thin glowing border */
+.monitor-frame {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border: 2px solid #00ff44;
+    box-shadow: 0 0 15px rgba(0, 255, 68, 0.2), inset 0 0 15px rgba(0, 255, 68, 0.2);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 5;
+}
+/* 1. The Container: Pins it to the top left corner */
+.terminal-text {
+    position: absolute;
+    top: 20px;
+    left: 30px;
+    text-align: left;
+    z-index: 10;
+}
+
+/* 2. The Text: Applies your custom font */
+.terminal-text p {
+    /* Change 'HackerTerminal' to whatever you named your font in @font-face */
+    font-family: 'HackerTerminal', "Courier New", monospace !important;
+    color: #00ff44 !important;
+    font-size: 1.5rem;
+    line-height: 1.2;
+    text-shadow: 0 0 5px #00ff44;
+    margin: 5px 0;
+}
+/* Force the specific paragraph tags to change */
+.terminal-text p {
+    font-family: "Courier New", Courier, monospace !important;
+    color: #00ff44 !important;
+    font-size: 1.5rem;
+    line-height: 1.2;
+    text-shadow: 0 0 5px #00ff44;
+    margin: 5px 0;
+}
+
+/* Main Center Content */
+.center-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: -75px;
+}
+
+.logo-wrapper {
+    position: relative;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+/* --- Optimized Stylized Logo Image (Mask Technique) --- */
+
+/* Adjusting the subtext alignment when in image mode */
+.logo-wrapper.image-mode {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: auto; /* Shrink wrapper to fit the graphic */
+}
+
+.styled-logo-image {
+    /* Step 1: Define the size of your graphic mark */
+    width: 1500px; /* Adjust width to fit your logo shape */
+    height: 750px; /* Adjust height to fit your logo shape */
+    
+    /* Step 2: Set the required green base color */
+    background-color: #00ff44;
+    
+    /* Step 3: Essential masking properties (forces transparent stencil) */
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    
+    /* Step 4: Apply the neon glow (Drop-shadow is best for masked images) */
+    filter: drop-shadow(0 0 15px rgba(0, 255, 68, 0.8));
+    
+    margin-bottom: 1px; /* Space above subtext */
+    z-index: 5; /* Ensure it stays behind global scanlines overlay */
+}
+
+
+/* The Progress Bar Area */
+.progress-container {
+    text-align: center;
+}
+
+.progress-container p {
+    font-family: 'RechargeBold', monospace;
+    color: #00ff44;
+    font-size: 2rem;
+    margin-bottom: 15px;
+    text-shadow: 0 0 8px #00ff44;
+}
+
+.progress-box {
+    width: 400px;
+    height: 25px;
+    border: 3px solid #00ff44;
+    box-shadow: 0 0 10px rgba(0, 255, 68, 0.5), inset 0 0 10px rgba(0, 255, 68, 0.5);
+    padding: 3px;
+    box-sizing: border-box;
+}
+
+.progress-fill {
+    height: 100%;
+    background-color: #00ff44;
+    box-shadow: 0 0 15px #00ff44;
+    transition: width 0.2s ease;
+}
+
+/* Bottom Footer */
+.bottom-footer {
+    position: absolute;
+    bottom: 20px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+.tagline {
+    font-family: 'VT323', monospace;
+    color: #00ff44;
+    font-size: 1.5rem;
+    text-shadow: 0 0 5px #00ff44;
 }
 
 /* 3. NAVBAR WRAPPER */
@@ -141,6 +328,154 @@ body {
 
 .blink-block {
     animation: blinker 1s steps(2, start) infinite;
+}
+
+/* ========================================== */
+/* THE RETRO TERMINAL HEADER                  */
+/* ========================================== */
+
+:root {
+    --crt-green: #2cdf2c;
+    --crt-green-rgb: 44, 223, 44;
+    --nav-top: 24px;
+    --nav-right: 25px;
+    --logo-top: -35px;
+    --logo-left: -10px;
+    --logo-size: 150px;
+}
+
+.retro-header {
+    position: fixed;
+    top: var(--nav-top);
+    right: var(--nav-right);
+    left: auto;
+    width: auto;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    z-index: 9999;
+    box-sizing: border-box;
+    font-family: 'HackerTerminal', 'VT323', 'Courier New', monospace;
+}
+
+/* --- THE LOGO AREA --- */
+.retro-logo {
+    position: fixed;
+    top: var(--logo-top);
+    left: var(--logo-left);
+    z-index: 10000;
+    color: var(--crt-green);
+    font-size: 1.35rem;
+    text-shadow: 0 0 6px rgba(var(--crt-green-rgb), 0.45);
+    letter-spacing: 0.8px;
+}
+
+.retro-logo-image {
+    height: var(--logo-size);
+    width: auto;
+    display: block;
+    filter: drop-shadow(0 0 6px rgba(var(--crt-green-rgb), 0.35));
+    transition: transform 0.18s ease, filter 0.18s ease, opacity 0.18s ease;
+}
+
+.retro-logo:hover .retro-logo-image,
+.retro-logo:focus-visible .retro-logo-image {
+    transform: translateY(-1px) scale(1.03);
+    filter: drop-shadow(0 0 10px rgba(var(--crt-green-rgb), 0.55));
+    opacity: 1;
+}
+
+.blinking-cursor {
+    animation: blink 1s step-end infinite;
+}
+
+@keyframes blink { 
+    50% { opacity: 0; } 
+}
+
+/* --- THE LINKS CONTAINER --- */
+.retro-nav-links {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: nowrap;
+    align-self: center;
+}
+
+/* --- THE LINKS THEMSELVES --- */
+.retro-nav-links a {
+    position: relative;
+    display: inline-block;
+    color: var(--crt-green) !important;
+    text-decoration: none !important;
+    font-size: 1.05rem;
+    text-shadow: 0 0 6px rgba(var(--crt-green-rgb), 0.45);
+    padding: 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    transition: opacity 0.15s ease, text-shadow 0.15s ease, transform 0.15s ease;
+    letter-spacing: 0.4px;
+    opacity: 0.92;
+    line-height: 1;
+}
+
+.retro-nav-links a::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -4px;
+    height: 1px;
+    background: rgba(var(--crt-green-rgb), 0.8);
+    box-shadow: 0 0 8px rgba(var(--crt-green-rgb), 0.5);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.15s ease;
+}
+
+.retro-nav-links a:hover {
+    opacity: 1;
+    text-shadow: 0 0 8px rgba(var(--crt-green-rgb), 0.62);
+    transform: translateY(-1px);
+}
+
+.retro-nav-links a:hover::after,
+.retro-nav-links a:focus-visible::after {
+    transform: scaleX(1);
+}
+
+.retro-nav-links a:focus-visible {
+    outline: none;
+    opacity: 1;
+    text-shadow: 0 0 8px rgba(var(--crt-green-rgb), 0.62);
+}
+
+@media (max-width: 980px) {
+    .retro-header {
+        top: var(--nav-top);
+        right: var(--nav-right);
+        left: auto;
+        width: auto;
+        padding: 0;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .retro-nav-links {
+        gap: 10px;
+        margin-left: auto;
+        flex-wrap: wrap;
+    }
+
+    .retro-nav-links a {
+        font-size: 0.98rem;
+    }
 }
 
 @keyframes blinker {

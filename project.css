@@ -1,0 +1,389 @@
+/* ========================================== */
+/* --- SYSTEM THEME VARIABLES (MASTER)    --- */
+/* ========================================== */
+:root {
+    --term-light: #2cdf2c;          /* Bright CRT Green */
+    --term-light-rgb: 192, 228, 140; /* RGB for Glowing/Transparency */
+    --term-dark: #19381c;           /* Dark Border Green */
+    --term-bg: #050805;             /* Pitch Black/Green Background */
+    --term-bg-rgb: 5, 8, 5;
+    --line-glow-soft: 0 0 10px rgba(var(--term-light-rgb), 0.32);
+    --line-glow-strong: 0 0 18px rgba(var(--term-light-rgb), 0.55), 0 0 40px rgba(var(--term-light-rgb), 0.25);
+}
+
+/* 1. REVERT THE BODY (Fixes the navbar and layout) */
+body {
+    background-color: var(--term-bg); 
+    color: var(--term-light);            
+    font-family: 'VT323', monospace;
+    margin: 0; 
+    /* The 100px top padding pushes the content down so your navbar fits perfectly */
+    padding: 100px 40px 40px 40px; 
+    display: block; /* Removes the flexbox that was breaking things */
+    text-shadow: 0 0 5px rgba(var(--term-light-rgb), 0.4); /* Subtle terminal glow */
+}
+
+/* 2. FULLY STRETCH THE WINDOW (Fills your widescreen monitor) */
+.crt-window {
+    width: 100%; /* Stretch fully from left to right */
+    max-width: none; /* Kills the width limit so it fills large monitors */
+    min-height: calc(100vh - 140px); /* Stretches dynamically to the bottom of the screen */
+    
+    background-color: rgba(var(--term-bg-rgb), 0.85);
+    border: 2px solid var(--term-light);
+    box-shadow: 0 0 20px rgba(var(--term-light-rgb), 0.15), inset 0 0 30px rgba(var(--term-light-rgb), 0.05), var(--line-glow-soft);
+    padding: 2px; 
+    position: relative;
+}
+
+/* Internal scanlines just for the window */
+.crt-window::before {
+    content: " "; display: block; position: absolute; top: 0; left: 0; bottom: 0; right: 0;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+    background-size: 100% 4px; z-index: 1; pointer-events: none;
+}
+
+/* --- TERMINAL HEADER --- */
+.window-header {
+    color: var(--term-light);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    font-size: 1.15rem;
+    font-weight: bold;
+    letter-spacing: 0.4px;
+    margin-bottom: 20px;
+    z-index: 2;
+    border: 1px solid rgba(var(--term-light-rgb), 0.5);
+    background: rgba(var(--term-bg-rgb), 0.86);
+    box-shadow: 0 0 8px rgba(var(--term-light-rgb), 0.2);
+}
+
+.window-header > span {
+    text-shadow: 0 0 6px rgba(var(--term-light-rgb), 0.45);
+}
+
+.window-header > span:last-child {
+    margin-left: auto;
+    font-size: 1rem;
+    opacity: 0.92;
+}
+
+@media (max-width: 760px) {
+    .window-header {
+        flex-wrap: wrap;
+        font-size: 1.05rem;
+        gap: 6px;
+    }
+
+    .window-header > span,
+    .window-header > span:last-child {
+        width: auto;
+        margin-left: 0;
+    }
+}
+
+/* --- THE SCROLLING GRID --- */
+.project-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-auto-flow: dense; /* MAGIC: This forces smaller items to fill empty gaps automatically! */
+    grid-auto-rows: auto;
+    gap: 24px;
+    padding: 20px;
+    overflow-y: auto; 
+    height: 100%;
+    align-content: start;
+    background-image:
+        linear-gradient(rgba(var(--term-light-rgb), 0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(var(--term-light-rgb), 0.06) 1px, transparent 1px);
+    background-size: 26px 26px;
+    align-items: start;
+}
+
+/* --- MEDIA MODULES (Base Styling) --- */
+.media-module {
+    display: flex; flex-direction: column; gap: 8px;
+    position: relative;
+    border: 1px solid rgba(var(--term-light-rgb), 0.35);
+    padding: 10px;
+    background: linear-gradient(180deg, rgba(var(--term-light-rgb), 0.07) 0%, rgba(var(--term-light-rgb), 0.02) 100%);
+    box-shadow: inset 0 0 0 1px rgba(var(--term-light-rgb), 0.2), var(--line-glow-soft);
+    align-self: start;
+}
+
+.media-module::before,
+.media-module::after {
+    content: "";
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border-color: rgba(var(--term-light-rgb), 0.8);
+    pointer-events: none;
+}
+
+.media-module::before {
+    top: -1px;
+    left: -1px;
+    border-top: 2px solid;
+    border-left: 2px solid;
+    filter: drop-shadow(0 0 4px rgba(var(--term-light-rgb), 0.7));
+}
+
+.media-module::after {
+    right: -1px;
+    bottom: -1px;
+    border-right: 2px solid;
+    border-bottom: 2px solid;
+    filter: drop-shadow(0 0 4px rgba(var(--term-light-rgb), 0.7));
+}
+
+/* Auto-vary image modules for an intentional, mixed layout */
+.project-grid > .media-module:not(.video-module) {
+    --module-span: 1;
+    --module-ratio: 4 / 4;
+    grid-column: span var(--module-span);
+    width: 100%;
+    justify-self: stretch;
+}
+
+.project-grid > .media-module:not(.video-module) .image-frame {
+    aspect-ratio: auto;
+}
+
+/* Pattern repeats every 10 modules to feel random but still pack tightly */
+.project-grid > .media-module:not(.video-module):nth-child(10n + 1) {
+    --module-span: 2;
+    --module-ratio: 16 / 9;
+}
+
+.project-grid > .media-module:not(.video-module):nth-child(10n + 2) {
+    --module-span: 1;
+    --module-ratio: 3 / 4;
+}
+
+.project-grid > .media-module:not(.video-module):nth-child(10n + 3) {
+    --module-span: 1;
+    --module-ratio: 1 / 1;
+}
+
+.project-grid > .media-module:not(.video-module):nth-child(10n + 4) {
+    --module-span: 1;
+    --module-ratio: 5 / 4;
+}
+
+.project-grid > .media-module:not(.video-module):nth-child(10n + 5) {
+    --module-span: 1;
+    --module-ratio: 4 / 5;
+}
+
+.project-grid > .media-module:not(.video-module):nth-child(10n + 6) {
+    --module-span: 1;
+    --module-ratio: 5 / 4;
+}
+
+.project-grid > .media-module:not(.video-module):nth-child(10n + 7) {
+    --module-span: 2;
+    --module-ratio: 21 / 9;
+}
+
+.project-grid > .media-module:not(.video-module):nth-child(10n + 8) {
+    --module-span: 1;
+    --module-ratio: 16 / 10;
+}
+
+.project-grid > .media-module:not(.video-module):nth-child(10n + 9) {
+    --module-span: 2;
+    --module-ratio: 3 / 2;
+}
+
+.project-grid > .media-module:not(.video-module):nth-child(10n + 10) {
+    --module-span: 1;
+    --module-ratio: 2 / 3;
+}
+
+@media (min-width: 1800px) {
+    .project-grid {
+        grid-template-columns: repeat(5, 1fr);
+    }
+}
+
+@media (max-width: 1280px) {
+    .project-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* Base Frame Styling */
+.image-frame, .video-frame {
+    width: 100%; 
+    border: 1px solid var(--term-light);
+    background-color: #000;
+    padding: 4px; 
+    box-sizing: border-box;
+    position: relative;
+    box-shadow: inset 0 0 0 1px rgba(var(--term-light-rgb), 0.28), var(--line-glow-soft);
+}
+
+.image-frame::before,
+.video-frame::before {
+    content: "";
+    position: absolute;
+    inset: 8px;
+    border-top: 1px solid rgba(var(--term-light-rgb), 0.35);
+    border-right: 1px solid rgba(var(--term-light-rgb), 0.2);
+    pointer-events: none;
+}
+
+/* --- DYNAMIC SIZES & SHAPES --- */
+/* 1. The Standard Detail Block (Spans 1 column) */
+.span-1 { grid-column: span 1; }
+.span-1 .image-frame { aspect-ratio: 4 / 4; } /* Perfectly square for small details */
+
+/* 2. The Wide Feature Block (Spans 2 columns) */
+.span-2 { grid-column: span 2; }
+.span-2 .image-frame { aspect-ratio: 16 / 9; } /* Widescreen cinematic shape */
+
+/* 3. The Panorama Block (Spans all 3 columns) */
+.span-3 { grid-column: 1 / -1; }
+.span-3 .image-frame { aspect-ratio: 21 / 9; } /* Ultra-wide, like a schematic or banner */
+
+@media (max-width: 980px) {
+    .project-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+    }
+
+    .project-grid > .media-module:not(.video-module) {
+        --module-span: 1;
+    }
+}
+
+@media (max-width: 680px) {
+    .project-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+        padding: 12px;
+    }
+
+    .project-grid > .media-module:not(.video-module) {
+        --module-span: 1;
+        --module-ratio: 4 / 3;
+    }
+}
+
+/* The actual image/video tag */
+.scalable-media {
+    width: 100%; height: 100%;
+    object-fit: cover; 
+    display: block;
+}
+
+/* Keep image previews uncropped and preserve original image proportions */
+.image-frame .scalable-media {
+    height: auto;
+    object-fit: contain;
+}
+
+/* --- CRT DESCRIPTIONS --- */
+.module-desc {
+    border-left: 3px solid var(--term-light);
+    padding: 8px 12px;
+    margin-top: 0;
+    font-size: 1.15rem; line-height: 1.4;
+    background: linear-gradient(90deg, rgba(var(--term-light-rgb), 0.1) 0%, transparent 100%);
+    box-shadow: inset 0 0 0 1px rgba(var(--term-light-rgb), 0.12);
+    min-height: 86px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.module-desc p {
+    margin: 2px 0;
+    line-height: 1.25;
+}
+
+.module-desc p:last-child {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+}
+
+/* --- THE VIDEO MODULE (Spans the bottom) --- */
+.video-module {
+    grid-column: 1 / -1; 
+    max-width: 1200px; /* <-- INCREASED FROM 800px */
+    width: 100%;
+    margin: 40px auto 20px auto; 
+    border-top: 1px dashed var(--term-light);
+    padding-top: 30px;
+    box-shadow: 0 -10px 20px -14px rgba(var(--term-light-rgb), 0.6);
+}
+.video-frame { aspect-ratio: 16/9; } 
+.top-desc { 
+    margin-bottom: 15px; border-left: none; 
+    border-right: 3px solid var(--term-light); 
+    text-align: right; 
+    background: linear-gradient(270deg, rgba(var(--term-light-rgb), 0.1) 0%, transparent 100%); 
+    min-height: auto;
+    padding-right: 12px;
+}
+
+@media (max-width: 680px) {
+    .module-desc {
+        min-height: 72px;
+        font-size: 1.05rem;
+    }
+}
+
+/* --- HOVER EFFECTS --- */
+.zoomable {
+    filter: grayscale(80%) contrast(1.2) sepia(20%) hue-rotate(50deg);
+    transition: all 0.3s ease; cursor: pointer;
+}
+.zoomable:hover {
+    filter: grayscale(0%); transform: scale(1.02);
+    box-shadow: var(--line-glow-strong);
+}
+
+/* ========================================== */
+/* --- 1. FULL-SCREEN LIGHTBOX MODAL      --- */
+/* ========================================== */
+.lightbox-overlay {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.9); z-index: 9999; 
+    display: none; justify-content: center; align-items: center;    
+    padding: 30px; box-sizing: border-box;
+}
+
+/* The full-scale image itself */
+#lightbox-img {
+    max-width: 100%; max-height: 100%;
+    object-fit: contain; 
+    border: 3px solid var(--term-light); 
+    box-shadow: 0 0 50px rgba(var(--term-light-rgb), 0.3); 
+    display: block;
+}
+
+/* The close button inside the lightbox */
+#close-lightbox {
+    position: absolute; top: 20px; right: 30px;
+    color: var(--term-light); font-size: 2rem; cursor: pointer;
+    font-family: 'VT323', monospace; 
+    text-shadow: 0 0 10px var(--term-light);
+    z-index: 10000; 
+}
+
+/* Accent line glow for all structural lines */
+.window-header,
+.media-module,
+.image-frame,
+.video-frame,
+.module-desc,
+.video-module {
+    text-shadow: 0 0 6px rgba(var(--term-light-rgb), 0.32);
+}

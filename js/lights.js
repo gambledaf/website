@@ -71,6 +71,16 @@ const helper1 = new RectAreaLightHelper(tvRimLight1);
 scene.add(helper1);
 helper1.visible = helperVisability; // Hide the helper by default, toggle to true for debugging
 
+const tvRimLight7 = new THREE.RectAreaLight(0x3F755A, 40, 0.5, 1.5);
+tvRimLight7.position.set(1.5, 1, -7); // Just above the TV and slightly forward    
+tvRimLight7.lookAt(0, 1, -8); // Pointing forward at the tapes
+scene.add(tvRimLight7);
+// Change this line
+const helper7 = new RectAreaLightHelper(tvRimLight7);  
+scene.add(helper7);
+helper7.visible = helperVisability; // Hide the helper by default, toggle to true for debugging
+
+
 const tvRimLight2 = new THREE.RectAreaLight(0x3F755A, 40, 0.5, 1.5);
 tvRimLight2.position.set(-1.5, 1, -7); // Just above the TV and slightly forward    
 tvRimLight2.lookAt(0, 1, -8); // Pointing forward at the tapes
@@ -102,19 +112,9 @@ const tvRimLight5 = new THREE.RectAreaLight(0x00ff00, 15, 0.5, 1.5);
 tvRimLight5.position.set(0, 1, -6.5); // Just above the TV and slightly forward    
 tvRimLight5.lookAt(0, 0, -6.5); // Pointing forward at the tapes
 scene.add(tvRimLight5);
-// Change this line
+
 const helper5 = new RectAreaLightHelper(tvRimLight5);  
 scene.add(helper5);
 helper5.visible = helperVisability; // Hide the helper by default, toggle to true for debugging
 
-
-// // A dedicated light just to catch the table's texture and edges
-// const tableRimLight = new THREE.SpotLight(0x576a73, 5);
-// tableRimLight.position.set(0, 7, 0); // Lower and further forward
-// tableRimLight.target.position.set(0, -0.3, -10); // Points back toward the TV
-// scene.add(tableRimLight);
-// tableRimLight.layers.set(0); // Default layer, affects everything except TV screen
-
-
-    // Note: If you ever need to turn helpers back on, add them here!
 }
