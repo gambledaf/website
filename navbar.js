@@ -82,20 +82,3 @@ document.getElementById('nav-contact').addEventListener('click', (e) => handleNa
 // Make clicking the logo take you home, just like before
 document.getElementById('nav-logo').addEventListener('click', (e) => handleNavClick(e, "home"));
 
-// Shared scroll hide/show behavior for both navbar links and standalone logo
-let lastScrollY = window.scrollY;
-window.addEventListener('scroll', () => {
-    const navbar = document.querySelector('.retro-header');
-    const logo = document.querySelector('.retro-logo');
-    const shouldHide = window.scrollY > lastScrollY && window.scrollY > 50;
-
-    if (navbar) {
-        navbar.style.transform = shouldHide ? 'translateY(-100%)' : 'translateY(0)';
-    }
-
-    if (logo) {
-        logo.style.transform = shouldHide ? 'translateY(-100%)' : 'translateY(0)';
-    }
-
-    lastScrollY = window.scrollY;
-});

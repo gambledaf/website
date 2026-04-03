@@ -9,14 +9,7 @@ RectAreaLightUniformsLib.init();
 const ambientLight = new THREE.AmbientLight(0x004D4D, 0.2);
 scene.add(ambientLight);
 
-// Section: TV Top Light
-const tvTopLight = new THREE.PointLight(0xffffff, 15, 5); // White, Intensity 15, Range 10
-tvTopLight.position.set(0, 5, -7); // Position it directly above the TV (adjust -7 to match TV Z)
-tvTopLight.castShadow = true;
-tvTopLight.shadow.mapSize.width = 1024;
-tvTopLight.shadow.mapSize.height = 1024;
-tvTopLight.shadow.bias = -0.0005; // Adjust bias to reduce shadow acne
-scene.add(tvTopLight);
+
 
 //  Section: Tape Lights — a point light for each tape, giving them that "glow" and making them pop off the table
 const tapeLight = new THREE.PointLight(0xffffff, 0.4, 5); 

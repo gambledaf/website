@@ -6,7 +6,6 @@ import { UnrealBloomPass } from "https://esm.sh/three@0.129.0/examples/jsm/postp
 import { OutlinePass } from "https://esm.sh/three@0.129.0/examples/jsm/postprocessing/OutlinePass.js";
 import { setupSceneLights } from './js/lights.js';
 import { projectData } from './js/files.js';
-import { crtShaderMaterial, typeSentence, renderCRT, setScreenTextInstant } from './js/crt.js';
 
 // --- 1. SHARED HELPERS & STATE ---
 function getVisibleConfig() {
@@ -16,16 +15,12 @@ function getVisibleConfig() {
     return { count, radius: (count - 1) / 2 };
 }
 
-// ✅ Cache config — recomputed only on resize, not every frame
 let cachedConfig = getVisibleConfig();
 const tapes = [];
 
 const numTapes = projectData.length;
 const tapeSpacing = 0.55;
-// Start at the first visible window (e.g. 0..8 when 9 tapes are visible), not mid-list.
-const initialCenter = numTapes > 0
-    ? Math.min(cachedConfig.radius, (numTapes - 1) / 2)
-    : 0;
+const initialCenter = numTapes > 0 ? Math.min(cachedConfig.radius, (numTapes - 1) / 2) : 0;
 
 const state = {
     zoom: 0,
@@ -34,34 +29,324 @@ const state = {
     targetScroll: initialCenter,
     activeTape: null,
     previousTape: null,
-    tvOn: true,
     selectedTape: null,
     isLocked: false,
     scrollSpeed: 0.1,
-    minDist: 999,
-    hoveredInteractable: null
+    minDist: 999
 };
 
 const POS_START = { x: 0, y: 0.6, z: -1.5 };
 const POS_END   = { x: 0, y: 0.4, z: 5 };
+const TAPE_HIGHLIGHT = {
+    dimOthers: 0.45,
+    colorLift: 0.35,
+    colorLerp: 0.2,
+    emissiveBoost: 0.28,
+    emissiveLerp: 0.18
+};
+const TAPE_HIGHLIGHT_COLOR = new THREE.Color(0xffffff);
+const TAPE_TMP_COLOR = new THREE.Color();
 
-let typingInterval = null;
-let fullGoalText = "";
-let currentText = "";
-let charIndex = 0;
+
+// --- 2. SEQUENCE BACKGROUND SETUP ---
+const SEQUENCE = {
+    folder: 'sequence_01',
+    start: 1,
+    end: 100,
+    pad: 4,
+    ext: 'jpg',
+    total: 100
+};
+
+const SEQUENCE_2 = {
+    folder: 'sequence_02',
+    start: 1,
+    end: 30,
+    pad: 4,
+    ext: 'jpg',
+    total: 30
+};
+
+const ABOUT_SEQUENCE = {
+    folder: 'about',
+    start: 1,
+    end: 30,
+    pad: 4,
+    ext: 'jpg',
+    total: 30
+};
+
+const CONTACT_SEQUENCE = {
+    folder: 'contact',
+    start: 1,
+    end: 30,
+    pad: 4,
+    ext: 'jpg',
+    total: 30
+};
+
+const SEQUENCE_BLEND = {
+    zoomStart: 0.72,
+    zoomFull: 0.92,
+    radiusNdc: 0.18,
+    softness: 0.72,
+    maxAlpha: 0.95
+};
+
+const SEQUENCE_TIMELINE = {
+    fps: 60,
+    loopEndFrame: 30,
+    animEndFrame: 70,
+    zoomedLoopEndFrame: 100
+};
+
+const seqCanvas = document.getElementById('sequence-canvas');
+const seqCtx = seqCanvas ? seqCanvas.getContext('2d') : null;
+const sequenceCache = new Map();
+const sequence2Cache = new Map();
+const aboutSequenceCache = new Map();
+const contactSequenceCache = new Map();
+const sequenceCachesByKey = {
+    default: sequenceCache,
+    about: aboutSequenceCache,
+    contact: contactSequenceCache
+};
+const sequenceConfigByKey = {
+    default: SEQUENCE,
+    about: ABOUT_SEQUENCE,
+    contact: CONTACT_SEQUENCE
+};
+const sequencePreloadState = {
+    default: false,
+    about: false,
+    contact: false
+};
+let activeSequenceKey = 'default';
+let sequenceLoadedCount = 0;
+let sequenceErrorCount = 0;
+let sequenceTimelineFrame = 0;
+let pendingSectionSequenceKey = null;
+let sequence2Preloaded = false;
+let lastDrawnSequenceKey = null;
+let lastDrawnFrame = -1;
+const blendCanvas = document.createElement('canvas');
+const blendCtx = blendCanvas.getContext('2d');
+
+function getLoopBoundaryFrame() {
+    return THREE.MathUtils.clamp(
+        SEQUENCE_TIMELINE.loopEndFrame,
+        0,
+        Math.max(0, SEQUENCE_TIMELINE.animEndFrame - 1)
+    );
+}
+
+function renderSequenceFromTimeline(timelineFrame) {
+    let progress = 0;
+
+    if (activeSequenceKey === 'default') {
+        // The default sequence uses the full 100-frame zoom track
+        const normalized = THREE.MathUtils.clamp(timelineFrame, 0, SEQUENCE_TIMELINE.zoomedLoopEndFrame);
+        progress = normalized / SEQUENCE_TIMELINE.zoomedLoopEndFrame;
+    } else {
+        // About & Contact are only 30 frames. We stretch the 0-30 timeline to equal 0-100% progress.
+        const loopMax = getLoopBoundaryFrame(); // This equals 30
+        const normalized = THREE.MathUtils.clamp(timelineFrame, 0, loopMax);
+        progress = normalized / loopMax;
+    }
+
+    drawSequence(progress);
+}
+
+function getNearestLoadedFrame(cache, sequenceConfig, targetFrame) {
+    if (cache.has(targetFrame)) return cache.get(targetFrame);
+
+    for (let offset = 1; offset < sequenceConfig.total; offset++) {
+        const backward = targetFrame - offset;
+        if (backward >= sequenceConfig.start && cache.has(backward)) {
+            return cache.get(backward);
+        }
+
+        const forward = targetFrame + offset;
+        if (forward <= sequenceConfig.end && cache.has(forward)) {
+            return cache.get(forward);
+        }
+    }
+
+    return null;
+}
+
+function getSequenceFramePath(sequenceConfig, frameNumber) {
+    const padded = String(frameNumber).padStart(sequenceConfig.pad, '0');
+    return `${sequenceConfig.folder}/${padded}.${sequenceConfig.ext}`;
+}
+
+function preloadSequenceByKey(sequenceKey, shouldTrackBootProgress = false) {
+    if (sequencePreloadState[sequenceKey]) return;
+
+    const sequenceConfig = sequenceConfigByKey[sequenceKey];
+    const cache = sequenceCachesByKey[sequenceKey];
+    if (!sequenceConfig || !cache) return;
+
+    sequencePreloadState[sequenceKey] = true;
+
+    for (let i = sequenceConfig.start; i <= sequenceConfig.end; i++) {
+        const img = new Image();
+        img.src = getSequenceFramePath(sequenceConfig, i);
+        img.onload = () => {
+            cache.set(i, img);
+            if (shouldTrackBootProgress) {
+                sequenceLoadedCount++;
+                sequenceProgress = (sequenceLoadedCount + sequenceErrorCount) / SEQUENCE.total;
+                updateLoadProgress();
+            }
+            if (sequenceKey === activeSequenceKey && i === sequenceConfig.start) drawSequence(0);
+        };
+        img.onerror = () => {
+            if (shouldTrackBootProgress) {
+                sequenceErrorCount++;
+                sequenceProgress = (sequenceLoadedCount + sequenceErrorCount) / SEQUENCE.total;
+                updateLoadProgress();
+            }
+            console.error(`ERROR: Failed to load sequence frame ${getSequenceFramePath(sequenceConfig, i)}`);
+        };
+    }
+}
+
+function preloadSequence2() {
+    if (sequence2Preloaded) return;
+    sequence2Preloaded = true;
+
+    for (let i = SEQUENCE_2.start; i <= SEQUENCE_2.end; i++) {
+        const img = new Image();
+        img.src = getSequenceFramePath(SEQUENCE_2, i);
+        img.onload = () => {
+            sequence2Cache.set(i, img);
+        };
+        img.onerror = () => {
+            console.error(`ERROR: Failed to load sequence_02 frame ${getSequenceFramePath(SEQUENCE_2, i)}`);
+        };
+    }
+}
+
+function getSequence2BlendAlpha() {
+    if (activeSequenceKey !== 'default') return 0;
+
+    if (!sequence2Preloaded) {
+        preloadSequence2();
+    }
+
+    const cameraTravel = THREE.MathUtils.clamp(
+        (camera.position.z - POS_START.z) / (POS_END.z - POS_START.z),
+        0,
+        1
+    );
+
+    // Performance gate: only run the feather effect at a single settled endpoint,
+    // not during zoom scrubbing or transitions.
+    const isSettled = Math.abs(state.zoom - state.targetZoom) < 0.015;
+    const isAtChosenEndpoint = cameraTravel <= 0.06;
+    if (!isSettled || !isAtChosenEndpoint) return 0;
+
+    const zoomNearTV = 1 - THREE.MathUtils.clamp(state.zoom, 0, 1);
+    const travelNearTV = 1 - cameraTravel;
+
+    const zoomInfluence = THREE.MathUtils.smoothstep(zoomNearTV, SEQUENCE_BLEND.zoomStart, SEQUENCE_BLEND.zoomFull);
+    const cameraInfluence = THREE.MathUtils.smoothstep(travelNearTV, 0.82, 0.97);
+
+    return zoomInfluence * cameraInfluence;
+}
+
+function drawSequence(progress) {
+    if (!seqCtx) return;
+    const activeSequenceConfig = sequenceConfigByKey[activeSequenceKey] || SEQUENCE;
+    const activeCache = sequenceCachesByKey[activeSequenceKey] || sequenceCache;
+    
+    // Clamp progress between 0 and 1 just in case
+    progress = Math.max(0, Math.min(1, progress));
+    const frameIndex = Math.floor(progress * (activeSequenceConfig.total - 1));
+    const targetFrame = activeSequenceConfig.start + frameIndex;
+    const blendAlpha = getSequence2BlendAlpha();
+    const hasBlendWork = blendAlpha >= 0.01;
+
+    // Skip expensive redraw when frame is unchanged and no blend overlay is active.
+    if (!hasBlendWork && lastDrawnSequenceKey === activeSequenceKey && lastDrawnFrame === targetFrame) {
+        return;
+    }
+
+    const img = getNearestLoadedFrame(activeCache, activeSequenceConfig, targetFrame);
+    if (!img) return;
+
+    lastDrawnSequenceKey = activeSequenceKey;
+    lastDrawnFrame = targetFrame;
+
+    const canvasRatio = window.innerWidth / window.innerHeight;
+    const imgRatio = img.width / img.height;
+    let sw, sh, sx, sy;
+
+    if (canvasRatio > imgRatio) {
+        sw = img.width;
+        sh = img.width / canvasRatio;
+        sx = 0;
+        sy = (img.height - sh) / 2;
+    } else {
+        sh = img.height;
+        sw = img.height * canvasRatio;
+        sx = (img.width - sw) / 2;
+        sy = 0;
+    }
+    seqCtx.drawImage(img, sx, sy, sw, sh, 0, 0, seqCanvas.width, seqCanvas.height);
+
+    if (blendAlpha < 0.01 || !blendCtx) return;
+
+    const targetFrame2 = THREE.MathUtils.clamp(targetFrame, SEQUENCE_2.start, SEQUENCE_2.end);
+    const img2 = getNearestLoadedFrame(sequence2Cache, SEQUENCE_2, targetFrame2);
+    if (!img2) return;
+
+    if (blendCanvas.width !== seqCanvas.width || blendCanvas.height !== seqCanvas.height) {
+        blendCanvas.width = seqCanvas.width;
+        blendCanvas.height = seqCanvas.height;
+    }
+    blendCtx.clearRect(0, 0, blendCanvas.width, blendCanvas.height);
+    blendCtx.drawImage(img2, sx, sy, sw, sh, 0, 0, blendCanvas.width, blendCanvas.height);
+
+    const mx = ((mouse.x + 1) * 0.5) * blendCanvas.width;
+    const my = ((1 - mouse.y) * 0.5) * blendCanvas.height;
+    const radiusPx = SEQUENCE_BLEND.radiusNdc * Math.min(blendCanvas.width, blendCanvas.height);
+    const innerRadiusPx = radiusPx * (1 - THREE.MathUtils.clamp(SEQUENCE_BLEND.softness, 0.05, 0.95));
+
+    const gradient = blendCtx.createRadialGradient(mx, my, innerRadiusPx, mx, my, radiusPx);
+    gradient.addColorStop(0, `rgba(0,0,0,${blendAlpha * SEQUENCE_BLEND.maxAlpha})`);
+    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+    blendCtx.globalCompositeOperation = 'destination-in';
+    blendCtx.fillStyle = gradient;
+    blendCtx.fillRect(0, 0, blendCanvas.width, blendCanvas.height);
+    blendCtx.globalCompositeOperation = 'source-over';
+
+    seqCtx.drawImage(blendCanvas, 0, 0, seqCanvas.width, seqCanvas.height);
+}
+
+// Ensure canvas matches screen on load
+if (seqCanvas) {
+    seqCanvas.width = window.innerWidth;
+    seqCanvas.height = window.innerHeight;
+}
+blendCanvas.width = window.innerWidth;
+blendCanvas.height = window.innerHeight;
+preloadSequenceByKey('default', true);
 
 // --- 3. GLOBAL SCENE ---
-
 const scene = new THREE.Scene();
-// scene.background = new THREE.Color(0x000000);
 const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.layers.enable(1);
 
 const renderer = new THREE.WebGLRenderer({
     canvas: document.getElementById("bg-canvas"),
     antialias: true,
-    alpha: true
+    alpha: true,
+    premultipliedAlpha: false // Keeps alpha compositing predictable over the sequence canvas
 });
+renderer.setClearColor(0x000000, 0);
 
 const perfProfile = (() => {
     const cores = navigator.hardwareConcurrency || 8;
@@ -80,14 +365,13 @@ const perfProfile = (() => {
 
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, perfProfile.pixelRatioCap));
-
-
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1;
 
+// Post-Processing
 const hdrRenderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
     type: THREE.HalfFloatType,
     format: THREE.RGBAFormat
@@ -96,83 +380,63 @@ const hdrRenderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.in
 const renderPass = new RenderPass(scene, camera);
 const composer = new EffectComposer(renderer, hdrRenderTarget);
 composer.addPass(renderPass);
+const usePostProcessing = false;
 
 const bloomPass = new UnrealBloomPass(
-    // Adaptive bloom resolution: lighter on lower-end devices.
     new THREE.Vector2(window.innerWidth * perfProfile.bloomScale, window.innerHeight * perfProfile.bloomScale),
-    3,
-    0.5,
-    1.2
+    3, 0.5, 1.2
 );
 composer.addPass(bloomPass);
-// --- NEW: OPTIMIZED OUTLINE PASS ---
-// Adaptive outline resolution to improve startup/render cost.
+
 const outlinePass = new OutlinePass(
     new THREE.Vector2(window.innerWidth * perfProfile.outlineScale, window.innerHeight * perfProfile.outlineScale),
-    scene,
-    camera
+    scene, camera
 );
-
-// Performance tweak
 outlinePass.downSampleRatio = perfProfile.lowEnd ? 3 : 2; 
-
-// Visual styling (Retro green to match your CRT)
-outlinePass.edgeStrength = 4.0;
-outlinePass.edgeGlow = 1.0;
-outlinePass.edgeThickness = 2.0;
+outlinePass.edgeStrength = perfProfile.lowEnd ? 2.4 : 4.0;
+outlinePass.edgeGlow = perfProfile.lowEnd ? 0.65 : 1.0;
+outlinePass.edgeThickness = perfProfile.lowEnd ? 1.5 : 2.0;
 outlinePass.visibleEdgeColor.set(0x00ff44); 
 outlinePass.hiddenEdgeColor.set(0x002200);
-
-if (perfProfile.lowEnd) {
-    outlinePass.edgeStrength = 2.4;
-    outlinePass.edgeGlow = 0.65;
-    outlinePass.edgeThickness = 1.5;
-}
-
 composer.addPass(outlinePass);
+
 setupSceneLights(scene);
 
 // --- 4. SCENE DATA ---
 const mouse = new THREE.Vector2(-100, -100);
 const raycaster = new THREE.Raycaster();
 const clock = new THREE.Clock();
-
-// ✅ Reusable vector — avoids allocating new THREE.Vector3() every frame
 const tempVec = new THREE.Vector3();
 
-// ✅ Dedicated interactables list — raycaster only hits what matters
-const interactables = [];
-
-let tvModel;
-let slideModel = null;
-let slideMixer = null;
-let slideAction = null;
-const blackMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-
+function getTapeRootFromObject(object3D) {
+    let current = object3D;
+    while (current) {
+        if (current.userData && typeof current.userData.index === 'number') {
+            return current;
+        }
+        current = current.parent;
+    }
+    return null;
+}
 
 // --- 5. LOAD MODELS & LOADING SCREEN ---
-const bootManager = new THREE.LoadingManager();
-const tapeManager = new THREE.LoadingManager(); // Separate manager for tapes
+const tapeManager = new THREE.LoadingManager(); 
 const loadingScreen = document.getElementById("loading-screen");
-const loadingText = document.getElementById("loading-text");
+const progressBarFill = document.getElementById("progress-bar");
+const loadingTextEl = document.getElementById("loading-text");
 
 const startupParams = new URLSearchParams(window.location.search);
-const shouldQuickResume =
-    sessionStorage.getItem('skipBootLoader') === '1' ||
-    localStorage.getItem('returnTapeIndex') !== null ||
-    startupParams.has('action');
+const shouldQuickResume = sessionStorage.getItem('skipBootLoader') === '1' || localStorage.getItem('returnTapeIndex') !== null || startupParams.has('action');
 
 let bootComplete = false;
 let tapesComplete = false;
 let finalStateHandled = false;
 
-/// --- SMART HACKER LOADING ENGINE ---
-const progressBarFill = document.getElementById("progress-bar");
-const loadingTextEl = document.getElementById("loading-text");
-
 let targetProgress = 0;
 let displayedProgress = 0;
-let bootFinished = false; // Tracks the REAL download status
+let bootFinished = false; 
+let sequenceProgress = 0;
+let tapeProgress = 0;
 
 if (shouldQuickResume) {
     if (loadingTextEl) loadingTextEl.innerText = "RESUMING ARCHIVE...";
@@ -186,126 +450,72 @@ function runFinalLoadStateOnce() {
     handleFinalLoadState();
 }
 
-const loadingPhrases = [
-    "ESTABLISHING SECURE CONNECTION...",
-    "BYPASSING MAINFRAME...",
-    "DECRYPTING ARCHIVES...",
-    "ASSEMBLING SCENE DATA...",
-    "INITIALIZING CRT OVERRIDE...",
-    "SYSTEM READY."
-];
+function updateLoadProgress() {
+    targetProgress = Math.min(100, (sequenceProgress * 0.85 + tapeProgress * 0.15) * 100);
 
-// 1. The REAL download progress sets the target
-bootManager.onProgress = (url, itemsLoaded, itemsTotal) => {
-    targetProgress = (itemsLoaded / itemsTotal) * 100;
-};
-
-// 2. The REAL download finishes
-bootManager.onLoad = () => {
-    targetProgress = 100;
-    bootFinished = true; // Signal the engine that it's safe to exit
-    bootComplete = true;
-    state.bootComplete = true;
-
-    // Warm-up compile only on stronger devices to avoid startup stalls.
-    if (perfProfile.warmupCompile && !shouldQuickResume) {
-        setTimeout(() => renderer.compile(scene, camera), 250);
+    if (sequenceProgress >= 1 && !bootFinished) {
+        bootFinished = true;
+        bootComplete = true;
+        if (tapesComplete) runFinalLoadStateOnce();
     }
+}
 
-    if (shouldQuickResume && loadingScreen) {
-        clearInterval(progressInterval);
-        sessionStorage.removeItem('skipBootLoader');
-        loadingScreen.style.opacity = "0";
-
-        setTimeout(() => {
-            loadingScreen.style.display = "none";
-            document.body.style.opacity = "1";
-
-            if (!tapesComplete) {
-                setScreenTextInstant("SYNCING ARCHIVES...\nPLEASE WAIT");
-            } else {
-                runFinalLoadStateOnce();
-            }
-        }, 120);
-    }
-};
-
-// 3. The Visual Engine (Runs every 30ms)
 const progressInterval = setInterval(() => {
-    
-    // Animate the bar catching up to the real download
     if (displayedProgress < targetProgress) {
-        
         if (bootFinished) {
-            // If the files loaded instantly, sprint to 100% to get out of the user's way
             displayedProgress += 15; 
         } else {
-            // Otherwise, chase the download speed smoothly with a tiny hacker "jitter"
             displayedProgress += (targetProgress - displayedProgress) * 0.15;
             displayedProgress += Math.random() * 2;
         }
 
         if (displayedProgress > targetProgress) displayedProgress = targetProgress;
-
-        // Update DOM
         if (progressBarFill) progressBarFill.style.width = `${displayedProgress}%`;
-
-        let phraseIndex = Math.floor((displayedProgress / 100) * (loadingPhrases.length - 1));
         if (loadingTextEl) {
-            loadingTextEl.innerText = `${loadingPhrases[phraseIndex]} [${Math.floor(displayedProgress)}%]`;
+            loadingTextEl.innerText = `SYNCING ARCHIVES... [${Math.floor(displayedProgress)}%] FRAMES:${sequenceLoadedCount}/${SEQUENCE.total}`;
         }
     }
 
-    // 4. Trigger the fade ONLY when both the visual bar AND the real download are 100%
-    if (displayedProgress >= 100 && bootFinished) {
-        clearInterval(progressInterval); // Kill the visual engine
-
-        // Keep a very short pause so completion looks intentional without feeling slow.
+    if (displayedProgress >= 100 && bootFinished && tapesComplete) {
+        clearInterval(progressInterval);
         setTimeout(() => {
-            loadingScreen.style.opacity = "0";
-            
+            if(loadingScreen) loadingScreen.style.opacity = "0";
             setTimeout(() => {
-                loadingScreen.style.display = "none";
+                if(loadingScreen) loadingScreen.style.display = "none";
                 document.body.style.opacity = "1";
-                
-                if (!tapesComplete) {
-                    setScreenTextInstant("SYNCING ARCHIVES...\nPLEASE WAIT");
-                } else {
-                    runFinalLoadStateOnce();
-                }
-            }, 380); // Match the faster loading-screen fade.
+                if (tapesComplete) runFinalLoadStateOnce();
+            }, 380); 
         }, 80); 
     }
 }, 30);
 
-// 2. TAPE SEQUENCE (Background downloading)
-tapeManager.onLoad = () => {
-    tapesComplete = true;
-    state.tapesComplete = true;
-    if (bootComplete) {
-        runFinalLoadStateOnce();
-    }
+tapeManager.onProgress = (url, loaded, total) => {
+    tapeProgress = total > 0 ? loaded / total : 0;
+    updateLoadProgress();
 };
 
-tapeManager.onProgress = (url, itemsLoaded, itemsTotal) => {
-    if (bootComplete && !tapesComplete) {
-        const progress = Math.floor((itemsLoaded / itemsTotal) * 100);
-        setScreenTextInstant(`SYNCING ARCHIVES... ${progress}%\nPLEASE WAIT`);
-    }
+tapeManager.onLoad = () => {
+    tapesComplete = true;
+    tapeProgress = 1;
+    updateLoadProgress();
+    if (bootComplete) runFinalLoadStateOnce();
+};
+
+tapeManager.onError = (url) => {
+    console.error(`ERROR: Failed to load model asset: ${url}`);
+    tapeProgress = 1;
+    tapesComplete = true;
+    updateLoadProgress();
+    if (bootComplete) runFinalLoadStateOnce();
 };
 
 function handleFinalLoadState() {
-    // Check for our hidden notes
     const returnIndex = localStorage.getItem('returnTapeIndex');
-    
-    // Check for navbar actions in the URL
     const urlParams = new URLSearchParams(window.location.search);
     const action = urlParams.get('action');
 
     if (returnIndex !== null) {
-        // --- 1. EJECT & RETURN TRICK ---
         localStorage.removeItem('returnTapeIndex'); 
-        
         const tapeId = parseInt(returnIndex);
         state.currentScroll = tapeId;
         state.targetScroll = tapeId;
@@ -315,9 +525,6 @@ function handleFinalLoadState() {
         state.targetZoom = 1;
         camera.position.set(POS_END.x, POS_END.y, POS_END.z);
         camera.lookAt(0, 0.8, -10);
-
-        if (!state.tvOn) toggleTVPower();
-        typeSentence("PROJECT EJECTED.\n\nRETURNING TO ARCHIVE...");
 
         setTimeout(() => {
             const tapeToEject = tapes[tapeId];
@@ -334,176 +541,31 @@ function handleFinalLoadState() {
         }, 800);
 
     } else if (action && (action === "projects" || action === "home" || action === "contact" || action === "about")) {
-        // --- 2. NAVBAR CLICK TRICK (SKIP INTRO) ---
-        // Pre-position the camera so the animation starts instantly
         if (action === "projects" || action === "home") {
-            state.zoom = 0;
-            state.targetZoom = 0;
+            state.zoom = 0; state.targetZoom = 0;
             camera.position.set(POS_START.x, POS_START.y, POS_START.z);
         } else {
-            state.zoom = 1;
-            state.targetZoom = 1;
+            state.zoom = 1; state.targetZoom = 1;
             camera.position.set(POS_END.x, POS_END.y, POS_END.z);
         }
         camera.lookAt(0, 0.8, -10);
-
-        // Clean up the URL so it looks professional (removes the ?action=)
         window.history.replaceState({}, document.title, window.location.pathname);
-
-        // Instantly trigger the correct TV text and logic
         handleSystemAction(action);
-
-    } else {
-        // --- 3. NORMAL FIRST-TIME LOAD ---
-        typeSentence("SYSTEM ONLINE.\n\nSCROLL TO BROWSE ARCHIVE.");
     }
 }
 
-const bootLoader = new GLTFLoader(bootManager);
+// --- TAPE LOADER ---
 const tapeLoader = new GLTFLoader(tapeManager);
-window.handleSystemAction = handleSystemAction;
-
-
-bootLoader.load("models/slide.glb", gltf => {
-    slideModel = gltf.scene;
-    slideModel.position.set(0, 0, 0);
-    slideMixer = new THREE.AnimationMixer(slideModel);
-
-    if (gltf.animations[0]) {
-        slideAction = slideMixer.clipAction(gltf.animations[0]);
-        slideAction.setLoop(THREE.LoopOnce);
-        slideAction.clampWhenFinished = true;
-    }
-
-    slideModel.traverse(c => {
-        if (c.isMesh) {
-            c.castShadow = true;
-            c.receiveShadow = true;
-            if (c.material) c.material.roughness = 0.85;
-        }
-    });
-
-    slideModel.scale.set(0.0001, 0.0001, 0.0001);
-    scene.add(slideModel);
-});
-
-bootLoader.load("models/tv.glb", gltf => {
-    tvModel = gltf.scene;
-    tvModel.position.set(0, 0, 0);
-
-    tvModel.traverse(c => {
-        if (c.isMesh) {
-            c.castShadow = true;
-            c.receiveShadow = true;
-
-            if (c.name === "screen") {
-                c.material = crtShaderMaterial;
-            } else {
-                // ✅ 1. Reference the existing material from the GLB
-                const mat = c.material;
-
-                // ✅ 2. Fix the color space for the Diffuse/Albedo map
-                if (mat.map) {
-                    mat.map.colorSpace = THREE.SRGBColorSpace;
-                }
-
-                mat.roughness = 1; // Multiplier for your roughness map
-                mat.metalness = 0.0; // Keep at 0 for plastic, 1 for metal parts
-                
-                // If you want the normal map to be stronger/weaker:
-                if (mat.normalMap) {
-                    mat.normalScale.set(1, 1); 
-                }
-
-                // ✅ 4. Handle Buttons (Interactable logic)
-                const name = (c.name || "").toLowerCase();
-                if (name.includes("button")) {
-                    // Clone so buttons can highlight individually
-                    c.material = mat.clone();
-                    c.userData.isInteractable = true;
-                    c.userData.origEmissive = c.material.emissive.getHex();
-                    interactables.push(c);
-                }
-            }
-        }
-    });
-
-    scene.add(tvModel);
-});
-
-// --- BACKGROUND GLTF LOADER ---
-bootLoader.load('models/background.glb', (gltf) => {
-    const backdrop = gltf.scene;
-    
-    
-    backdrop.traverse((node) => {
-        // Target the specific mesh name from your Blender file
-        if (node.isMesh && node.name === "background") {
-            
-            // 1. Force the material to ignore scene lighting 
-            // This ensures your custom gray-to-black gradient is perfectly clear
-            node.material.emissiveIntensity = 1.0; 
-            
-            // 2. Depth Settings: Keep it as the "furthest" layer
-            node.material.depthWrite = false;
-            node.material.depthTest = true; // Still allow foreground objects to hide it
-            
-            // 3. Color Accuracy
-            if (node.material.map) {
-                node.material.map.colorSpace = THREE.SRGBColorSpace;
-            }
-        }
-    });
-
-    // Move it to the back of the "void"
-    backdrop.position.set(0, 0, -100);
-    backdrop.renderOrder = -100; // Forces it to render first (behind everything)
-
-    scene.add(backdrop);
-});
-// --- TABLE LOADER ---
-bootLoader.load("models/table.glb", gltf => {
-    const table = gltf.scene;
-    table.name = "table";
-    
-    // Position it so the top surface is at y: -0.3 
-    // (Where your tapes currently sit)
-    table.position.set(0, -0.3, -5); 
-    table.scale.set(1, 1, 1);
-
-    table.traverse(c => {
-        if (c.isMesh) {
-            c.castShadow = true;
-            c.receiveShadow = true; // Crucial for the green glow to hit the wood/metal
-            
-            // Give it a slightly reflective "polished" finish
-            c.material.roughness = 0.5;
-            c.material.metalness = 0;
-        }
-    });
-
-    scene.add(table);
-});
 tapeLoader.load("models/tape.glb", gltf => {
     for (let i = 0; i < numTapes; i++) {
         const tape = gltf.scene.clone();
         const mixer = new THREE.AnimationMixer(tape);
 
-        let action1 = null;
-        let action2 = null;
+        let action1 = gltf.animations[1] ? mixer.clipAction(gltf.animations[1]) : null;
+        let action2 = gltf.animations[0] ? mixer.clipAction(gltf.animations[0]) : null;
 
-        if (gltf.animations[1]) {
-            action1 = mixer.clipAction(gltf.animations[1]);
-            action1.setLoop(THREE.LoopOnce);
-            action1.clampWhenFinished = true;
-            action1.timeScale = 1.0;
-        }
-        if (gltf.animations[0]) {
-            action2 = mixer.clipAction(gltf.animations[0]);
-            action2.setLoop(THREE.LoopOnce);
-            action2.clampWhenFinished = true;
-            action2.timeScale = 1.0;
-        }
+        if (action1) { action1.setLoop(THREE.LoopOnce); action1.clampWhenFinished = true; action1.timeScale = 1.0; }
+        if (action2) { action2.setLoop(THREE.LoopOnce); action2.clampWhenFinished = true; action2.timeScale = 1.0; }
 
         tape.scale.set(1, 1, 1);
         tape.position.set(0, 0.4, 0);
@@ -513,14 +575,41 @@ tapeLoader.load("models/tape.glb", gltf => {
             mixer: mixer,
             action1: action1,
             action2: action2,
-            projectInfo: projectData[i]
-            
+            projectInfo: projectData[i],
+            highlightMats: []
         };
 
         tape.traverse(c => {
             if (c.isMesh) {
                 c.frustumCulled = false;
                 c.castShadow = true;
+
+                // ✅ THE FIX: Clone the material so each tape can change color independently!
+                if (Array.isArray(c.material)) {
+                    c.material = c.material.map(m => m.clone());
+                } else if (c.material) {
+                    c.material = c.material.clone();
+                }
+
+                // Now grab the newly cloned materials for your highlight logic
+                const mats = Array.isArray(c.material) ? c.material : [c.material];
+                mats.forEach((mat) => {
+                    if (!mat) return;
+                    if (!tape.userData.highlightMats.includes(mat)) {
+                        tape.userData.highlightMats.push(mat);
+                    }
+                    mat.transparent = false;
+                    mat.opacity = 1;
+                    mat.depthWrite = true;
+                    if (!mat.userData) mat.userData = {};
+                    if (mat.color && !mat.userData.baseColor) {
+                        mat.userData.baseColor = mat.color.clone();
+                    }
+                    if (typeof mat.emissiveIntensity === 'number' && typeof mat.userData.baseEmissiveIntensity !== 'number') {
+                        mat.userData.baseEmissiveIntensity = mat.emissiveIntensity;
+                    }
+                    mat.needsUpdate = true;
+                });
             }
         });
 
@@ -529,36 +618,77 @@ tapeLoader.load("models/tape.glb", gltf => {
     }
 });
 
-// --- BACKGROUND RETRO GRID ---
-// Parameters: size of grid, number of squares, center line color, grid color
-const gridSize = 60;
-const gridDivisions = 60;
-const gridColor = 0xaaaaaa; // Light grey/white to match your reference
+// --- 6. LOGIC & ROUTING ---
+window.handleSystemAction = handleSystemAction;
+function handleSystemAction(action) {
+    if (state.isLocked) {
+        if (state.selectedTape) {
+            const flip = state.selectedTape.userData.action2;
+            if (flip) {
+                flip.paused = false;
+                flip.timeScale = -1; 
+                flip.play();
+            }
+        }
+        state.isLocked = false;
+        state.selectedTape = null;
+        state.scrollSpeed = 0.1; 
+    }
 
-const bgGrid = new THREE.GridHelper(gridSize, gridDivisions, gridColor, gridColor);
+    switch (action) {
+        case "home":
+            pendingSectionSequenceKey = null;
+            activeSequenceKey = 'default';
+            preloadSequenceByKey('default', false);
+            drawSequence(sequenceTimelineFrame / SEQUENCE_TIMELINE.zoomedLoopEndFrame);
+            state.targetZoom = 0;
+            break;
+        case "about":
+            if (state.zoom > 0.05) {
+                pendingSectionSequenceKey = 'about';
+                activeSequenceKey = 'default';
+                preloadSequenceByKey('default', false);
+            } else {
+                pendingSectionSequenceKey = null;
+                activeSequenceKey = 'about';
+                preloadSequenceByKey('about', false);
+            }
+            drawSequence(sequenceTimelineFrame / SEQUENCE_TIMELINE.zoomedLoopEndFrame);
+            state.targetZoom = 0;
+            break;
+        case "contact":
+            if (state.zoom > 0.05) {
+                pendingSectionSequenceKey = 'contact';
+                activeSequenceKey = 'default';
+                preloadSequenceByKey('default', false);
+            } else {
+                pendingSectionSequenceKey = null;
+                activeSequenceKey = 'contact';
+                preloadSequenceByKey('contact', false);
+            }
+            drawSequence(sequenceTimelineFrame / SEQUENCE_TIMELINE.zoomedLoopEndFrame);
+            state.targetZoom = 0;
+            break;
+        case "projects":
+            pendingSectionSequenceKey = null;
+            activeSequenceKey = 'default';
+            preloadSequenceByKey('default', false);
+            drawSequence(sequenceTimelineFrame / SEQUENCE_TIMELINE.zoomedLoopEndFrame);
+            state.targetZoom = 1; 
+            break;
+    }
+}
 
-// By default, GridHelper lays flat on the floor. 
-// We rotate it 90 degrees to stand it up like a wall facing the camera.
-bgGrid.rotation.x = Math.PI / 2;
+function openProjectPage(data) {
+    if (data && data.url) {
+        sessionStorage.setItem('skipBootLoader', '1');
+        document.body.style.transition = "opacity 0.5s ease";
+        document.body.style.opacity = "0";
 
-// Push it way back behind the TV and the table
-bgGrid.position.set(0, 0, -15); 
-
-// Make it look subtle and retro (adjust opacity to taste)
-bgGrid.material.transparent = true;
-bgGrid.material.opacity = 0.15; 
-
-// If you want your bloom pass to make it glow slightly, keep this line:
-bgGrid.material.color.setHex(0xffffff); 
-
-scene.add(bgGrid);
-
-// --- 6. LOGIC & TEXT ---
-function toggleTVPower() {
-    state.tvOn = !state.tvOn;
-    tvModel.traverse(c => {
-        if (c.isMesh && c.name === "screen") c.material = state.tvOn ? crtShaderMaterial : blackMaterial;
-    });
+        setTimeout(() => {
+            window.location.href = data.url;
+        }, 500); 
+    }
 }
 
 // --- 7. EVENTS ---
@@ -572,8 +702,6 @@ const SCROLL_DELAY = 50;
 
 window.addEventListener("wheel", e => {
     if (scrollCooldown) return;
-
-    // ✅ Use cached config
     const { radius } = cachedConfig;
 
     if (e.deltaY > 5) {
@@ -605,8 +733,14 @@ window.addEventListener("resize", () => {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, perfProfile.pixelRatioCap));
+    
+    if (seqCanvas) {
+        seqCanvas.width = window.innerWidth;
+        seqCanvas.height = window.innerHeight;
+    }
+    blendCanvas.width = window.innerWidth;
+    blendCanvas.height = window.innerHeight;
 
-    // ✅ Only place we recompute config
     cachedConfig = getVisibleConfig();
     const { radius } = cachedConfig;
     state.targetScroll = THREE.MathUtils.clamp(state.targetScroll, radius, numTapes - 1 - radius);
@@ -617,15 +751,6 @@ window.addEventListener("resize", () => {
 });
 
 window.addEventListener('click', () => {
-
-    raycaster.setFromCamera(mouse, camera);
-    
-    // 1. TEST BUTTONS
-    const buttonHits = raycaster.intersectObjects(interactables, false);
-
-    // 2. TEST TAPES
-    const visibleTapes = tapes.filter(t => t.visible);
-    const tapeHits = raycaster.intersectObjects(visibleTapes, true);
     if (state.zoom > 0.9 && state.activeTape && !state.isLocked) {
         state.isLocked = true;
         state.scrollSpeed = 0.03;
@@ -635,7 +760,7 @@ window.addEventListener('click', () => {
         setTimeout(() => {
             const projectData = state.selectedTape.userData.projectInfo;
             openProjectPage(projectData);
-        }, 1500); // Triggers 1.5s after the tape slides in
+        }, 1500); 
         
         const hov = state.selectedTape.userData.action1;
         const flip = state.selectedTape.userData.action2;
@@ -643,171 +768,60 @@ window.addEventListener('click', () => {
         setTimeout(() => {
             if (flip) {
                 if (hov) hov.stop();
-
                 flip.reset();
                 flip.setEffectiveWeight(1.0);
                 flip.play();
-
-                typeSentence("LOADING PROJECT...");
-
-                setTimeout(() => {
-                    if (slideModel && slideAction) {
-                        slideModel.scale.set(1, 1, 1);
-                        slideAction.reset();
-                        slideAction.play();
-                    }
-                }, 600);
-
                 setTimeout(() => { state.targetZoom = 0; }, 500);
             }
         }, 400);
-
-        return;
-    }
-
-    // ✅ Raycast only against interactables, not the entire scene
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(interactables, false);
-
-// Inside your click event listener, after the raycast:
-    if (intersects.length > 0) {
-        const obj = intersects[0].object;
-        const name = obj.name.toLowerCase();
-
-        if (name.includes("button")) {
-            // Press animation (Adjust Y/X/Z based on your model's orientation)
-            obj.position.y -= 0.02; 
-            setTimeout(() => obj.position.y += 0.02, 100);
-
-            // THE MAPPING FIX:
-            if (name.includes("01")) handleSystemAction("power");
-            if (name.includes("02")) handleSystemAction("home");
-            if (name.includes("03")) handleSystemAction("about");    // Should zoom IN
-            if (name.includes("04")) handleSystemAction("projects"); // Should zoom OUT
-            if (name.includes("05")) handleSystemAction("contact");  // Should zoom IN
-        }
     }
 });
-// --- THE MASTER CONTROLLER ---
-function handleSystemAction(action) {
-    // 1. GLOBAL EJECT (If a tape is currently playing, spit it out first)
-    if (state.isLocked) {
-        const hud = document.getElementById('project-hud');
-        if (hud) hud.classList.remove('active');
-        
-        if (state.selectedTape) {
-            const flip = state.selectedTape.userData.action2;
-            if (flip) {
-                flip.paused = false;
-                flip.timeScale = -1; // Reverse to slide out
-                flip.play();
-            }
-        }
-        state.isLocked = false;
-        state.selectedTape = null;
-        state.scrollSpeed = 0.1; 
-    }
-
-    // 2. ROUTE THE ACTIONS
-    switch (action) {
-        case "power": // Button_01
-            toggleTVPower();
-            break;
-
-        case "home": // Button_02
-            state.targetZoom = 0; // ZOOM OUT
-            if (!state.tvOn) toggleTVPower();
-            typeSentence("SYSTEM HOME...\n\nWELCOME TO THE ARCHIVE.");
-            break;
-
-        case "about": // Button_03
-            state.targetZoom = 0;
-            if (!state.tvOn) toggleTVPower();
-            typeSentence("ABOUT SYSTEM...\n\nI AM A 3D DEVELOPER\nBUILDING INTERACTIVE WORLDS.");
-            break;
-
-        case "projects": // Button_04
-            state.targetZoom = 1; // ZOOM OUT
-            if (!state.tvOn) toggleTVPower();
-            typeSentence("PROJECT ARCHIVE...\n\nSELECT A TAPE BELOW.");
-            break;
-
-        case "contact": // Button_05
-            state.targetZoom = 0;
-            if (!state.tvOn) toggleTVPower();
-            typeSentence("CONTACT PROTOCOL...\n\nEMAIL: hello@portfolio.com\nSIGNAL: SECURE");
-            break;
-    }
-}
-
-// Helper for the Zoom-In sequence
-function triggerTVMenu(text) {
-    if (state.targetZoom < 1) {
-        state.targetZoom = 1;
-        setTimeout(() => {
-            if (!state.tvOn) toggleTVPower();
-            typeSentence(text);
-        }, 800); 
-    } else {
-        if (!state.tvOn) toggleTVPower();
-        typeSentence(text);
-    }
-}
-// --- PROJECT PAGE HANDLER ---
-function openProjectPage(data) {
-    if (data && data.url) {
-        sessionStorage.setItem('skipBootLoader', '1');
-
-        // 1. Fade the entire 3D screen to black
-        document.body.style.transition = "opacity 0.5s ease";
-        document.body.style.opacity = "0";
-
-        // 2. Wait for the fade to finish, then change the page
-        setTimeout(() => {
-            window.location.href = data.url;
-        }, 500); 
-
-    } else {
-        console.warn("Missing URL in files.js for project:", data?.title);
-        typeSentence("ERROR: FILE CORRUPTED.\n\nNO URL FOUND.");
-    }
-}
 
 // --- 8. ANIMATE ---
 function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
-    
 
-    // ✅ Smooth zoom lerp
+    // 1. SCROLL WHEEL OVERRIDE
+    // If the mouse wheel pushes us towards the tapes (zoom > 0.5), force the default sequence.
+    if (state.targetZoom > 0.5) {
+        pendingSectionSequenceKey = null;
+        if (activeSequenceKey !== 'default') {
+            activeSequenceKey = 'default';
+            preloadSequenceByKey('default', false);
+        }
+    }
+
+    // 2. Smooth zoom lerp
     state.zoom = THREE.MathUtils.lerp(state.zoom, state.targetZoom, 0.06);
 
-    // ✅ Fade bloom with zoom — no hard pop, free perf when zoomed out
-   // bloomPass.strength = THREE.MathUtils.lerp(bloomPass.strength, state.zoom < 0.5 ? 1.2 : 0.0, 0.05);
+    // 3. APPLY DEFERRED SEQUENCE
+    // Only switch to About/Contact once the zoom-out animation has settled completely.
+    if (pendingSectionSequenceKey && state.targetZoom === 0 && state.zoom < 0.03) {
+        activeSequenceKey = pendingSectionSequenceKey;
+        preloadSequenceByKey(activeSequenceKey, false);
+        pendingSectionSequenceKey = null;
+    }
 
-    if (slideMixer) slideMixer.update(delta);
-
-    // 1. SCROLL
+    // 4. SCROLL TAPES
     state.currentScroll = THREE.MathUtils.lerp(state.currentScroll, state.targetScroll, state.scrollSpeed);
 
-    const { radius } = cachedConfig; // ✅ cached
+    const { radius } = cachedConfig; 
     const center = Math.round(state.currentScroll);
+    const visibleTapes = [];
 
-    // 2. TAPE LOOP
     let currentFrameActiveTape = null;
     let currentFrameMinDist = 999;
 
     tapes.forEach((tape, i) => {
         tape.visible = i >= center - radius && i <= center + radius;
-
-        // ✅ Only update mixer if tape is visible
         if (tape.visible && tape.userData.mixer) tape.userData.mixer.update(delta);
         if (!tape.visible) return;
+        visibleTapes.push(tape);
 
         tape.position.x = (i - state.currentScroll) * tapeSpacing;
 
         if (state.zoom > 0.9) {
-            // ✅ Reuse tempVec — no GC pressure
             tape.getWorldPosition(tempVec);
             tempVec.project(camera);
 
@@ -821,53 +835,82 @@ function animate() {
         }
     });
 
-    state.activeTape = (currentFrameMinDist < 0.1) ? currentFrameActiveTape : null;
+    let hoveredTapeFromRay = null;
+    if (state.zoom > 0.9) {
+        raycaster.setFromCamera(mouse, camera);
+        const hits = raycaster.intersectObjects(visibleTapes, true);
+        if (hits.length > 0) {
+            hoveredTapeFromRay = getTapeRootFromObject(hits[0].object);
+        }
+    }
+
+    state.activeTape = hoveredTapeFromRay || (state.zoom > 0.9 ? currentFrameActiveTape : null);
     state.minDist = currentFrameMinDist;
 
     const tapeToOutline = state.selectedTape || state.activeTape;
+    outlinePass.selectedObjects = tapeToOutline ? [tapeToOutline] : [];
 
-    if (tapeToOutline) {
-        // It expects an array, so we wrap our tape in brackets
-        outlinePass.selectedObjects = [tapeToOutline];
-    } else {
-        // Clear the outline if nothing is selected/hovered
-        outlinePass.selectedObjects = [];
-    }
+    const hoverFocusTape = (!state.isLocked && state.zoom > 0.9) ? state.activeTape : null;
+    const selectedFocusTape = (state.selectedTape && state.selectedTape.visible) ? state.selectedTape : null;
+    const focusTape = selectedFocusTape || hoverFocusTape;
+    const hasFocusCandidate = !!focusTape && focusTape.visible;
+    const focusIndex = hasFocusCandidate ? focusTape.userData.index : -1;
 
-    // 3. HOVER ANIMATION TRIGGERS
+    // Lightweight hover highlight (no extra render pass): focused tape bright, others dim.
+    tapes.forEach((tape) => {
+        const highlighted = hasFocusCandidate && tape.userData.index === focusIndex;
+
+        const mats = tape.userData.highlightMats || [];
+        mats.forEach((mat) => {
+            if (!mat || !mat.userData) return;
+
+            if (mat.color && mat.userData.baseColor) {
+                if (hasFocusCandidate) {
+                    if (highlighted) {
+                        TAPE_TMP_COLOR.copy(mat.userData.baseColor).lerp(TAPE_HIGHLIGHT_COLOR, TAPE_HIGHLIGHT.colorLift);
+                        mat.color.lerp(TAPE_TMP_COLOR, TAPE_HIGHLIGHT.colorLerp);
+                    } else {
+                        TAPE_TMP_COLOR.copy(mat.userData.baseColor).multiplyScalar(TAPE_HIGHLIGHT.dimOthers);
+                        mat.color.lerp(TAPE_TMP_COLOR, TAPE_HIGHLIGHT.colorLerp);
+                    }
+                } else {
+                    mat.color.lerp(mat.userData.baseColor, TAPE_HIGHLIGHT.colorLerp);
+                }
+            }
+
+            if (typeof mat.emissiveIntensity === 'number') {
+                const baseEmissive = (typeof mat.userData.baseEmissiveIntensity === 'number') ? mat.userData.baseEmissiveIntensity : 0;
+                const targetEmissive = hasFocusCandidate
+                    ? (baseEmissive + (highlighted ? TAPE_HIGHLIGHT.emissiveBoost : 0))
+                    : baseEmissive;
+                mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, targetEmissive, TAPE_HIGHLIGHT.emissiveLerp);
+            }
+        });
+    });
+
+    // Hover Animation Triggers
     if (!state.isLocked && state.activeTape !== state.previousTape) {
         const hoverUI = document.getElementById('tape-hover-ui');
         if (state.previousTape?.userData.action1) {
             const hov = state.previousTape.userData.action1;
-            hov.paused = false;
-            hov.timeScale = -1;
-            hov.play();
-
-            hoverUI.classList.remove('visible');
+            hov.paused = false; hov.timeScale = -1; hov.play();
+            if(hoverUI) hoverUI.classList.remove('visible');
         }
         if (state.activeTape?.userData.action1) {
             const hov = state.activeTape.userData.action1;
-            hov.paused = false;
-            hov.timeScale = 1;
-            hov.play();
+            hov.paused = false; hov.timeScale = 1; hov.play();
             const data = state.activeTape.userData.projectInfo;
-            if (data) {
+            if (data && hoverUI) {
                 document.getElementById('hover-category').innerText = data.category ? data.category.toUpperCase() : "SYSTEM FILE";
                 document.getElementById('hover-title').innerText = data.title ? data.title.toUpperCase() : "UNKNOWN_DATA";
                 document.getElementById('hover-desc').innerText = data.shortDesc ? data.shortDesc : "";
-                
                 hoverUI.classList.add('visible');
             }
         }
         state.previousTape = state.activeTape;
     }
 
-  // 4. CRT RENDER — ✅ skip when TV is off
-    if (state.tvOn) {
-        renderCRT(renderer);
-    }
-
-    // 5. CAMERA
+    // 3. CAMERA
     const targetX = THREE.MathUtils.lerp(POS_START.x, POS_END.x, state.zoom);
     const targetY = THREE.MathUtils.lerp(POS_START.y, POS_END.y, state.zoom);
     const targetZ = THREE.MathUtils.lerp(POS_START.z, POS_END.z, state.zoom);
@@ -877,39 +920,58 @@ function animate() {
     camera.position.z = THREE.MathUtils.lerp(camera.position.z, targetZ, 0.04);
     camera.lookAt(0, 0.8, -10);
 
-    // 6. CURSOR & HIGHLIGHT — ✅ single raycaster call against interactables only
-    if (!state.isLocked) {
-        let cursorStyle = "default";
-        let currentHitObj = null;
+    // 4. SCRUB THE BACKGROUND SEQUENCE USING ACTUAL CAMERA TRAVEL
+    const framesToAdvance = delta * SEQUENCE_TIMELINE.fps;
+    const loopBoundary = getLoopBoundaryFrame();
+    const cameraTravel = THREE.MathUtils.clamp(
+        (camera.position.z - POS_START.z) / (POS_END.z - POS_START.z),
+        0,
+        1
+    );
 
-        if (state.zoom < 0.5) {
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObjects(interactables, false);
-            for (let i = 0; i < intersects.length; i++) {
-                if (intersects[i].object.userData?.isInteractable) {
-                    cursorStyle = "pointer";
-                    currentHitObj = intersects[i].object;
-                    break;
-                }
-            }
-        } else if (state.zoom > 0.9 && state.activeTape) {
-            cursorStyle = "pointer";
+    if (cameraTravel >= 0.98 && state.targetZoom > 0.5) {
+        // Fully zoomed in: loop the deep segment.
+        sequenceTimelineFrame += framesToAdvance;
+        if (sequenceTimelineFrame < SEQUENCE_TIMELINE.animEndFrame) {
+            sequenceTimelineFrame = SEQUENCE_TIMELINE.animEndFrame;
         }
-
-        document.body.style.cursor = cursorStyle;
-
-        if (currentHitObj !== state.hoveredInteractable) {
-            if (state.hoveredInteractable?.material) {
-                state.hoveredInteractable.material.emissive.setHex(state.hoveredInteractable.userData.origEmissive);
-            }
-            if (currentHitObj?.material) {
-                currentHitObj.material.emissive.setHex(0x333333);
-            }
-            state.hoveredInteractable = currentHitObj;
+        if (sequenceTimelineFrame >= SEQUENCE_TIMELINE.zoomedLoopEndFrame) {
+            sequenceTimelineFrame = SEQUENCE_TIMELINE.animEndFrame;
+        }
+    } else if (cameraTravel > 0.02) {
+        // Transition phase directly follows real camera movement.
+        sequenceTimelineFrame = THREE.MathUtils.lerp(
+            loopBoundary,
+            SEQUENCE_TIMELINE.animEndFrame,
+            cameraTravel
+        );
+    } else {
+        // Fully zoomed out: loop the idle outer segment.
+        if (sequenceTimelineFrame > loopBoundary) {
+            sequenceTimelineFrame = loopBoundary;
+        }
+        sequenceTimelineFrame += framesToAdvance;
+        if (sequenceTimelineFrame > loopBoundary) {
+            sequenceTimelineFrame = 0;
         }
     }
 
-    composer.render();
+    renderSequenceFromTimeline(sequenceTimelineFrame);
+
+    // 5. CURSOR
+    if (!state.isLocked) {
+        let cursorStyle = "default";
+        if (state.zoom > 0.9 && state.activeTape) {
+            cursorStyle = "pointer";
+        }
+        document.body.style.cursor = cursorStyle;
+    }
+
+    if (usePostProcessing) {
+        composer.render();
+    } else {
+        renderer.render(scene, camera);
+    }
 }
 
 animate();
