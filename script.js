@@ -205,6 +205,7 @@ let sectionIntroPlayed = false;
 let defaultPowerOnPlayed = false;
 let pendingMenuAction = null;
 let pendingScrollDelta = 0;
+let sectionPreloadQueued = false;
 const blendCanvas = document.createElement('canvas');
 const blendCtx = blendCanvas.getContext('2d');
 
@@ -244,6 +245,22 @@ function queueMenuActionThroughPowerOn(action) {
     pendingSectionSequenceKey = null;
     activateDefaultSequence({ playPowerOn: true, resetFrame: true });
     state.targetZoom = 0;
+}
+
+function queueBackgroundSectionPreload() {
+    if (sectionPreloadQueued) return;
+    sectionPreloadQueued = true;
+
+    const doPreload = () => {
+        preloadSequenceByKey('about', false);
+        preloadSequenceByKey('contact', false);
+    };
+
+    if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(() => doPreload(), { timeout: 1200 });
+    } else {
+        setTimeout(doPreload, 700);
+    }
 }
 
 function getLoopBoundaryFrame() {
@@ -614,6 +631,7 @@ function runFinalLoadStateOnce() {
     if (finalStateHandled) return;
     finalStateHandled = true;
     handleFinalLoadState();
+    queueBackgroundSectionPreload();
 }
 
 function updateLoadProgress() {

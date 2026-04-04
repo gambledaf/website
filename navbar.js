@@ -5,6 +5,18 @@ const inSubfolder = window.location.pathname.includes('/filepage/');
 // If we are in the subfolder, we need to go UP one level ("../") to find images and the index.
 const basePath = inSubfolder ? '../' : '';
 
+// Basic client-side content protection: disable right-click and drag-save interactions.
+document.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+});
+
+document.addEventListener('dragstart', (e) => {
+    const target = e.target;
+    if (target instanceof HTMLImageElement || target instanceof HTMLVideoElement || target instanceof HTMLAnchorElement) {
+        e.preventDefault();
+    }
+});
+
 // --- 2. THE NEW RETRO NAVBAR HTML ---
 const navHTML = `
   <div class="crt-overlay"></div>
