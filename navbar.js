@@ -17,6 +17,30 @@ document.addEventListener('dragstart', (e) => {
     }
 });
 
+// Keep the viewport scale fixed so browser zoom shortcuts do not desync DOM and canvas visuals.
+window.addEventListener('keydown', (e) => {
+    const isZoomShortcut = (e.ctrlKey || e.metaKey) && (
+        e.key === '+' ||
+        e.key === '=' ||
+        e.key === '-' ||
+        e.key === '_' ||
+        e.key === '0' ||
+        e.code === 'NumpadAdd' ||
+        e.code === 'NumpadSubtract' ||
+        e.code === 'Numpad0'
+    );
+
+    if (isZoomShortcut) {
+        e.preventDefault();
+    }
+});
+
+window.addEventListener('wheel', (e) => {
+    if (e.ctrlKey) {
+        e.preventDefault();
+    }
+}, { passive: false });
+
 // --- 2. THE NEW RETRO NAVBAR HTML ---
 const navHTML = `
   <div class="crt-overlay"></div>
