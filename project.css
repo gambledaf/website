@@ -88,17 +88,17 @@ body {
 /* --- THE SCROLLING GRID --- */
 .project-grid {
     display: grid;
-    /* Size threshold: cards never get too small and variation stays controlled */
-    --tile-min: clamp(280px, 20vw, 360px);
-    grid-template-columns: repeat(auto-fit, minmax(var(--tile-min), var(--tile-min)));
-    grid-auto-flow: dense; /* MAGIC: This forces smaller items to fill empty gaps automatically! */
+    --tile-min: clamp(360px, 30vw, 560px);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-flow: dense;
     grid-auto-rows: auto;
     gap: 24px;
     padding: 20px;
-    overflow-y: auto; 
+    overflow-y: auto;
     height: 100%;
-    width: fit-content;
+    width: 100%;
     max-width: 100%;
+    min-height: 0;
     margin: 0 auto;
     align-content: start;
     background-image:
@@ -146,82 +146,31 @@ body {
     filter: drop-shadow(0 0 4px rgba(var(--term-light-rgb), 0.7));
 }
 
-/* Auto-vary image modules for an intentional, mixed layout */
-.project-grid > .media-module:not(.video-module) {
-    --module-span: 1;
-    --module-ratio: 4 / 4;
-    grid-column: span var(--module-span);
+/* Equal-size image modules */
+.project-grid > .media-module:not(.video-module):not(.scroll-gallery-module) {
+    grid-column: span 1;
     width: 100%;
     justify-self: stretch;
+    transform: none;
 }
 
-.project-grid > .media-module:not(.video-module) .image-frame {
-    aspect-ratio: auto;
-    min-height: clamp(150px, 16vw, 240px);
-    max-height: clamp(260px, 34vw, 420px);
+.project-grid > .media-module:not(.video-module):not(.scroll-gallery-module) .image-frame {
+    width: 100%;
+    /* This max-height ensures that even on massive widescreen monitors, 
+       the boxes don't get infinitely tall */
+    max-height: 45vh; 
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
+    background-color: #000; /* Keeps the empty space dark like a terminal */
 }
 
-.project-grid > .media-module:not(.video-module):nth-child(odd) {
-    transform: translateY(-4px);
-}
-
-.project-grid > .media-module:not(.video-module):nth-child(even) {
-    transform: translateY(6px);
-}
-
-/* Pattern repeats every 10 modules to feel random but still pack tightly */
-.project-grid > .media-module:not(.video-module):nth-child(10n + 1) {
-    --module-span: 2;
-    --module-ratio: 16 / 9;
-}
-
-.project-grid > .media-module:not(.video-module):nth-child(10n + 2) {
-    --module-span: 1;
-    --module-ratio: 2 / 3;
-}
-
-.project-grid > .media-module:not(.video-module):nth-child(10n + 3) {
-    --module-span: 2;
-    --module-ratio: 5 / 3;
-}
-
-.project-grid > .media-module:not(.video-module):nth-child(10n + 4) {
-    --module-span: 1;
-    --module-ratio: 3 / 4;
-}
-
-.project-grid > .media-module:not(.video-module):nth-child(10n + 5) {
-    --module-span: 2;
-    --module-ratio: 21 / 9;
-}
-
-.project-grid > .media-module:not(.video-module):nth-child(10n + 6) {
-    --module-span: 1;
-    --module-ratio: 1 / 1;
-}
-
-.project-grid > .media-module:not(.video-module):nth-child(10n + 7) {
-    --module-span: 2;
-    --module-ratio: 4 / 3;
-}
-
-.project-grid > .media-module:not(.video-module):nth-child(10n + 8) {
-    --module-span: 1;
-    --module-ratio: 4 / 5;
-}
-
-.project-grid > .media-module:not(.video-module):nth-child(10n + 9) {
-    --module-span: 2;
-    --module-ratio: 3 / 2;
-}
-
-.project-grid > .media-module:not(.video-module):nth-child(10n + 10) {
-    --module-span: 1;
-    --module-ratio: 5 / 4;
+.project-grid > .media-module:not(.video-module):not(.scroll-gallery-module) .image-frame .scalable-media {
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    object-fit: initial;
 }
 
 /* Base Frame Styling */
@@ -245,18 +194,18 @@ body {
     pointer-events: none;
 }
 
-/* --- DYNAMIC SIZES & SHAPES --- */
-/* 1. The Standard Detail Block (Spans 1 column) */
+/* 3. DYNAMIC BENTO SIZES (Ensures heights match across rows) */
+/* Span 1 (Half width) */
 .span-1 { grid-column: span 1; }
-.span-1 .image-frame { aspect-ratio: 4 / 4; } /* Perfectly square for small details */
+.span-1 .image-frame { aspect-ratio: 4 / 4; } 
 
-/* 2. The Wide Feature Block (Spans 2 columns) */
+/* Span 2 (Full width) */
 .span-2 { grid-column: span 2; }
-.span-2 .image-frame { aspect-ratio: 16 / 9; } /* Widescreen cinematic shape */
+.span-2 .image-frame { aspect-ratio: 21 / 9; } /* Adjusted so it is flush with two 4/4 squares next to it */
 
-/* 3. The Panorama Block (Spans all 3 columns) */
+/* Span 3 (Full width override) */
 .span-3 { grid-column: 1 / -1; }
-.span-3 .image-frame { aspect-ratio: 21 / 9; } /* Ultra-wide, like a schematic or banner */
+.span-3 .image-frame { aspect-ratio: 21 / 9; }
 
 @media (max-width: 980px) {
     .project-grid {
@@ -264,8 +213,7 @@ body {
         gap: 20px;
     }
 
-    .project-grid > .media-module:not(.video-module) {
-        --module-span: 1;
+    .project-grid > .media-module:not(.video-module):not(.scroll-gallery-module) {
         transform: none;
     }
 }
@@ -277,23 +225,116 @@ body {
         padding: 12px;
     }
 
-    .project-grid > .media-module:not(.video-module) {
-        --module-span: 1;
-        --module-ratio: 4 / 3;
+    .project-grid > .media-module:not(.video-module):not(.scroll-gallery-module) {
+        transform: none;
     }
 }
 
 /* The actual image/video tag */
 .scalable-media {
     width: 100%; height: 100%;
-    object-fit: cover; 
+    object-fit: contain;
     display: block;
 }
 
 /* Keep image previews uncropped and preserve original image proportions */
 .image-frame .scalable-media {
+    height: auto;
+    object-fit: contain;
+}
+
+/* --- HORIZONTAL SCROLL GALLERY --- */
+.scroll-gallery-module {
+    grid-column: 1 / -1;
+    width: 100%;
+    margin-top: 14px;
+    border-top: 1px dashed var(--term-light);
+    padding-top: 22px;
+    scroll-margin-top: 50vh;
+}
+
+.gallery-stage {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 14px;
+}
+
+.gallery-nav {
+    border: 1px solid rgba(var(--term-light-rgb), 0.7);
+    background: rgba(var(--term-bg-rgb), 0.9);
+    color: var(--term-light);
+    font-family: 'VT323', monospace;
+    font-size: 1.25rem;
+    line-height: 1;
+    min-width: 64px;
+    min-height: 64px;
+    padding: 0;
+    cursor: pointer;
+    box-shadow: inset 0 0 0 1px rgba(var(--term-light-rgb), 0.15), var(--line-glow-soft);
+    transition: background-color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
+.gallery-nav:hover:not(:disabled) {
+    background: rgba(var(--term-light-rgb), 0.14);
+    transform: scale(1.02);
+}
+
+.gallery-nav:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.gallery-strip {
+    display: flex;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    gap: 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px 2px 14px 2px;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: 2px;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    scroll-behavior: smooth;
+}
+
+.gallery-strip::-webkit-scrollbar {
+    display: none;
+}
+
+.gallery-item {
+    flex: 0 0 100%;
+    border: 1px solid rgba(var(--term-light-rgb), 0.45);
+    background: rgba(var(--term-bg-rgb), 0.75);
+    padding: 4px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    height: clamp(360px, 46vw, 720px);
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+}
+
+@media (max-width: 680px) {
+    .gallery-stage {
+        gap: 8px;
+    }
+
+    .gallery-nav {
+        min-width: 48px;
+        min-height: 48px;
+        font-size: 1.05rem;
+    }
+}
+
+.gallery-item img {
+    width: 100%;
     height: 100%;
     object-fit: contain;
+    display: block;
 }
 
 /* --- CRT DESCRIPTIONS --- */
@@ -339,11 +380,12 @@ body {
 }
 .top-desc { 
     margin-bottom: 15px; border-left: none; 
-    border-right: 3px solid var(--term-light); 
-    text-align: right; 
-    background: linear-gradient(270deg, rgba(var(--term-light-rgb), 0.1) 0%, transparent 100%); 
+    border-right: none;
+    border-left: 3px solid var(--term-light);
+    text-align: left; 
+    background: linear-gradient(90deg, rgba(var(--term-light-rgb), 0.1) 0%, transparent 100%); 
     min-height: auto;
-    padding-right: 12px;
+    padding-left: 12px;
 }
 
 @media (max-width: 680px) {
@@ -355,11 +397,11 @@ body {
 
 /* --- HOVER EFFECTS --- */
 .zoomable {
-    filter: grayscale(80%) contrast(1.2) sepia(20%) hue-rotate(50deg);
+    filter: none;
     transition: all 0.3s ease; cursor: pointer;
 }
 .zoomable:hover {
-    filter: grayscale(0%); transform: scale(1.02);
+    filter: none; transform: scale(1.02);
     box-shadow: var(--line-glow-strong);
 }
 

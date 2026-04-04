@@ -39,13 +39,27 @@ const loadingScreen = document.getElementById('loading-screen');
 const navbarEl = document.querySelector('.retro-header');
 const logoEl = document.querySelector('.retro-logo');
 
+const navVisibilityState = {
+    loadingHidden: false,
+    scrollHidden: false,
+    hoverReveal: false
+};
+
+function applyNavbarVisibility() {
+    if (!navbarEl || !logoEl) return;
+
+    const shouldHide = navVisibilityState.loadingHidden || (navVisibilityState.scrollHidden && !navVisibilityState.hoverReveal);
+    navbarEl.classList.toggle('nav-is-hidden', shouldHide);
+    logoEl.classList.toggle('nav-is-hidden', shouldHide);
+}
+
 function syncNavbarLoadingVisibility() {
     if (!navbarEl || !logoEl) return;
 
     const loadingVisible = !!loadingScreen && getComputedStyle(loadingScreen).display !== 'none' && getComputedStyle(loadingScreen).opacity !== '0';
 
-    navbarEl.classList.toggle('nav-is-hidden', loadingVisible);
-    logoEl.classList.toggle('nav-is-hidden', loadingVisible);
+    navVisibilityState.loadingHidden = loadingVisible;
+    applyNavbarVisibility();
 }
 
 syncNavbarLoadingVisibility();
@@ -53,6 +67,126 @@ syncNavbarLoadingVisibility();
 if (loadingScreen) {
     const loadingObserver = new MutationObserver(syncNavbarLoadingVisibility);
     loadingObserver.observe(loadingScreen, { attributes: true, attributeFilter: ['style', 'class'] });
+}
+
+// On project pages: hide navbar on scroll down, reveal when scrolling up or when mouse reaches top edge.
+const projectGridEl = document.querySelector('.project-grid');
+if ((inSubfolder || projectGridEl) && navbarEl && logoEl) {
+    const getCurrentScroll = () => {
+        const windowScroll = window.scrollY || document.documentElement.scrollTop || 0;
+        const gridScroll = projectGridEl ? projectGridEl.scrollTop : 0;
+        return Math.max(windowScroll, gridScroll);
+    };
+
+    let lastScroll = getCurrentScroll();
+    const deltaThreshold = 4;
+    let scrollAccumulator = 0;
+    let lastDirection = 0;
+    const revealEnterY = 18;
+    const revealExitY = 84;
+    let hoverHideTimer = null;
+
+    const setHoverReveal = (value) => {
+        if (navVisibilityState.hoverReveal === value) return;
+        navVisibilityState.hoverReveal = value;
+        applyNavbarVisibility();
+    };
+
+    const handleProjectScroll = () => {
+        const currentScroll = getCurrentScroll();
+        const delta = currentScroll - lastScroll;
+
+        if (currentScroll <= 10) {
+            navVisibilityState.scrollHidden = false;
+            scrollAccumulator = 0;
+            lastDirection = 0;
+        } else if (delta !== 0) {
+            const direction = delta > 0 ? 1 : -1;
+
+            if (direction !== lastDirection) {
+                scrollAccumulator = 0;
+                lastDirection = direction;
+            }
+
+            scrollAccumulator += Math.abs(delta);
+
+            if (scrollAccumulator >= deltaThreshold) {
+                navVisibilityState.scrollHidden = direction > 0;
+                scrollAccumulator = 0;
+            }
+        }
+
+        lastScroll = currentScroll;
+        applyNavbarVisibility();
+    };
+
+    window.addEventListener('scroll', handleProjectScroll, { passive: true });
+
+    if (projectGridEl) {
+        projectGridEl.addEventListener('scroll', handleProjectScroll, { passive: true });
+    }
+
+    document.addEventListener('mousemove', (e) => {
+        const targetEl = e.target instanceof Element ? e.target : null;
+        const overNavbar = !!targetEl && (!!targetEl.closest('.retro-header') || !!targetEl.closest('.retro-logo'));
+
+        if (overNavbar || e.clientY <= revealEnterY) {
+            if (hoverHideTimer) {
+                clearTimeout(hoverHideTimer);
+                hoverHideTimer = null;
+            }
+            setHoverReveal(true);
+            return;
+        }
+
+        if (navVisibilityState.hoverReveal && e.clientY >= revealExitY) {
+            if (hoverHideTimer) clearTimeout(hoverHideTimer);
+            hoverHideTimer = setTimeout(() => {
+                setHoverReveal(false);
+                hoverHideTimer = null;
+            }, 120);
+        }
+    });
+
+    navbarEl.addEventListener('mouseenter', () => {
+        if (hoverHideTimer) {
+            clearTimeout(hoverHideTimer);
+            hoverHideTimer = null;
+        }
+        setHoverReveal(true);
+    });
+
+    navbarEl.addEventListener('mouseleave', () => {
+        if (hoverHideTimer) clearTimeout(hoverHideTimer);
+        hoverHideTimer = setTimeout(() => {
+            setHoverReveal(false);
+            hoverHideTimer = null;
+        }, 140);
+    });
+
+    logoEl.addEventListener('mouseenter', () => {
+        if (hoverHideTimer) {
+            clearTimeout(hoverHideTimer);
+            hoverHideTimer = null;
+        }
+        setHoverReveal(true);
+    });
+
+    logoEl.addEventListener('mouseleave', () => {
+        if (hoverHideTimer) clearTimeout(hoverHideTimer);
+        hoverHideTimer = setTimeout(() => {
+            setHoverReveal(false);
+            hoverHideTimer = null;
+        }, 140);
+    });
+
+    document.addEventListener('mouseleave', () => {
+        if (hoverHideTimer) clearTimeout(hoverHideTimer);
+        setHoverReveal(false);
+    });
+
+    // Ensure initial state is correct after navigation/restore.
+    handleProjectScroll();
 }
 
 // --- 3. THE SMART CLICK LOGIC ---

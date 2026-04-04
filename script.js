@@ -15,6 +15,8 @@ function getVisibleConfig() {
     return { count, radius: (count - 1) / 2 };
 }
 
+
+
 let cachedConfig = getVisibleConfig();
 const tapes = [];
 
@@ -35,14 +37,70 @@ const state = {
     minDist: 999
 };
 
+let projectOpenTimeoutId = null;
+let flipTimeoutId = null;
+let zoomOutTimeoutId = null;
+
+function clearProjectTransitionTimers() {
+    if (projectOpenTimeoutId) {
+        clearTimeout(projectOpenTimeoutId);
+        projectOpenTimeoutId = null;
+    }
+    if (flipTimeoutId) {
+        clearTimeout(flipTimeoutId);
+        flipTimeoutId = null;
+    }
+    if (zoomOutTimeoutId) {
+        clearTimeout(zoomOutTimeoutId);
+        zoomOutTimeoutId = null;
+    }
+}
+
+function unlockTapeSelection({ resetFlipInstantly = false } = {}) {
+    const selected = state.selectedTape;
+    if (selected) {
+        const hov = selected.userData.action1;
+        const flip = selected.userData.action2;
+
+        if (hov) {
+            hov.stop();
+            hov.reset();
+        }
+
+        if (flip) {
+            if (resetFlipInstantly) {
+                flip.stop();
+                flip.reset();
+            } else {
+                flip.paused = false;
+                flip.timeScale = -1;
+                flip.play();
+            }
+        }
+    }
+
+    state.isLocked = false;
+    state.selectedTape = null;
+    state.scrollSpeed = 0.1;
+}
+
+function restoreArchiveInteractionState() {
+    clearProjectTransitionTimers();
+    unlockTapeSelection({ resetFlipInstantly: true });
+    state.activeTape = null;
+    state.previousTape = null;
+    document.body.style.cursor = 'default';
+}
+
 const POS_START = { x: 0, y: 0.6, z: -1.5 };
 const POS_END   = { x: 0, y: 0.4, z: 5 };
 const TAPE_HIGHLIGHT = {
-    dimOthers: 0.45,
-    colorLift: 0.35,
-    colorLerp: 0.2,
-    emissiveBoost: 0.28,
-    emissiveLerp: 0.18
+    dimOthers: 0.35,
+    dimRange: 2.0,
+    colorLift: 0.28,
+    colorLerp: 0.12,
+    emissiveBoost: 0.22,
+    emissiveLerp: 0.12
 };
 const TAPE_HIGHLIGHT_COLOR = new THREE.Color(0xffffff);
 const TAPE_TMP_COLOR = new THREE.Color();
@@ -52,10 +110,10 @@ const TAPE_TMP_COLOR = new THREE.Color();
 const SEQUENCE = {
     folder: 'sequence_01',
     start: 1,
-    end: 100,
+    end: 120,
     pad: 4,
     ext: 'jpg',
-    total: 100
+    total: 120
 };
 
 const SEQUENCE_2 = {
@@ -70,19 +128,31 @@ const SEQUENCE_2 = {
 const ABOUT_SEQUENCE = {
     folder: 'about',
     start: 1,
-    end: 30,
+    end: 60,
     pad: 4,
     ext: 'jpg',
-    total: 30
+    total: 60
 };
 
 const CONTACT_SEQUENCE = {
     folder: 'contact',
     start: 1,
-    end: 30,
+    end: 60,
     pad: 4,
     ext: 'jpg',
-    total: 30
+    total: 60
+};
+
+const SECTION_SEQUENCE_TIMELINE = {
+    fps: 30,
+    totalFrames: 60,
+    introEndFrame: 30,
+    loopStartFrame: 30,
+    loopEndFrameExclusive: 60
+};
+
+const SECTION_PLAYBACK = {
+    frameStep: 1
 };
 
 const SEQUENCE_BLEND = {
@@ -95,9 +165,11 @@ const SEQUENCE_BLEND = {
 
 const SEQUENCE_TIMELINE = {
     fps: 60,
-    loopEndFrame: 30,
-    animEndFrame: 70,
-    zoomedLoopEndFrame: 100
+    powerOnEndFrame: 20,
+    loopStartFrame: 20,
+    loopEndFrame: 50,
+    animEndFrame: 90,
+    zoomedLoopEndFrame: 120
 };
 
 const seqCanvas = document.getElementById('sequence-canvas');
@@ -129,32 +201,84 @@ let pendingSectionSequenceKey = null;
 let sequence2Preloaded = false;
 let lastDrawnSequenceKey = null;
 let lastDrawnFrame = -1;
+let sectionIntroPlayed = false;
+let defaultPowerOnPlayed = false;
+let pendingMenuAction = null;
+let pendingScrollDelta = 0;
 const blendCanvas = document.createElement('canvas');
 const blendCtx = blendCanvas.getContext('2d');
+
+function activateSectionSequence(sequenceKey) {
+    activeSequenceKey = sequenceKey;
+    preloadSequenceByKey(sequenceKey, false);
+    sequenceTimelineFrame = 0;
+    sectionIntroPlayed = false;
+    lastDrawnSequenceKey = null;
+    lastDrawnFrame = -1;
+}
+
+// --- ADD THIS NEW HELPER ---
+function activateDefaultSequence({ playPowerOn = true, resetFrame = true } = {}) {
+    if (activeSequenceKey !== 'default') {
+        activeSequenceKey = 'default';
+        preloadSequenceByKey('default', false);
+
+        if (playPowerOn) {
+            if (resetFrame) sequenceTimelineFrame = 0;
+            defaultPowerOnPlayed = false;
+        } else {
+            if (resetFrame) {
+                sequenceTimelineFrame = Math.max(sequenceTimelineFrame, SEQUENCE_TIMELINE.loopStartFrame);
+            }
+            defaultPowerOnPlayed = true;
+        }
+        
+        lastDrawnSequenceKey = null;
+        lastDrawnFrame = -1;
+    }
+}
+
+function queueMenuActionThroughPowerOn(action) {
+    pendingMenuAction = action;
+    pendingScrollDelta = 0;
+    pendingSectionSequenceKey = null;
+    activateDefaultSequence({ playPowerOn: true, resetFrame: true });
+    state.targetZoom = 0;
+}
 
 function getLoopBoundaryFrame() {
     return THREE.MathUtils.clamp(
         SEQUENCE_TIMELINE.loopEndFrame,
-        0,
+        SEQUENCE_TIMELINE.loopStartFrame,
         Math.max(0, SEQUENCE_TIMELINE.animEndFrame - 1)
     );
 }
 
 function renderSequenceFromTimeline(timelineFrame) {
-    let progress = 0;
-
     if (activeSequenceKey === 'default') {
         // The default sequence uses the full 100-frame zoom track
         const normalized = THREE.MathUtils.clamp(timelineFrame, 0, SEQUENCE_TIMELINE.zoomedLoopEndFrame);
-        progress = normalized / SEQUENCE_TIMELINE.zoomedLoopEndFrame;
+        const progress = normalized / SEQUENCE_TIMELINE.zoomedLoopEndFrame;
+        drawSequence(progress);
     } else {
-        // About & Contact are only 30 frames. We stretch the 0-30 timeline to equal 0-100% progress.
-        const loopMax = getLoopBoundaryFrame(); // This equals 30
-        const normalized = THREE.MathUtils.clamp(timelineFrame, 0, loopMax);
-        progress = normalized / loopMax;
-    }
+        // About & Contact: play full rendered frame stream at native section FPS.
+        const activeSequenceConfig = sequenceConfigByKey[activeSequenceKey] || ABOUT_SEQUENCE;
+        const maxOffset = Math.max(0, activeSequenceConfig.total - 1);
+        const frameIndex = THREE.MathUtils.clamp(
+            Math.floor(timelineFrame),
+            0,
+            maxOffset
+        );
 
-    drawSequence(progress);
+        let sampledOffset = Math.floor(frameIndex / SECTION_PLAYBACK.frameStep) * SECTION_PLAYBACK.frameStep;
+        if (frameIndex === maxOffset) {
+            // Keep the true final frame reachable so loops/endpoints do not feel truncated.
+            sampledOffset = maxOffset;
+        }
+
+        const targetFrame = activeSequenceConfig.start + sampledOffset;
+        drawSequence(0, targetFrame);
+    }
 }
 
 function getNearestLoadedFrame(cache, sequenceConfig, targetFrame) {
@@ -189,7 +313,15 @@ function preloadSequenceByKey(sequenceKey, shouldTrackBootProgress = false) {
 
     sequencePreloadState[sequenceKey] = true;
 
+    const isSectionSequence = sequenceKey === 'about' || sequenceKey === 'contact';
+
     for (let i = sequenceConfig.start; i <= sequenceConfig.end; i++) {
+        if (isSectionSequence) {
+            const relativeIndex = i - sequenceConfig.start;
+            const isSampledFrame = (relativeIndex % SECTION_PLAYBACK.frameStep === 0) || i === sequenceConfig.end;
+            if (!isSampledFrame) continue;
+        }
+
         const img = new Image();
         img.src = getSequenceFramePath(sequenceConfig, i);
         img.onload = () => {
@@ -256,15 +388,21 @@ function getSequence2BlendAlpha() {
     return zoomInfluence * cameraInfluence;
 }
 
-function drawSequence(progress) {
+function drawSequence(progress, forcedFrame = null) {
     if (!seqCtx) return;
     const activeSequenceConfig = sequenceConfigByKey[activeSequenceKey] || SEQUENCE;
     const activeCache = sequenceCachesByKey[activeSequenceKey] || sequenceCache;
     
     // Clamp progress between 0 and 1 just in case
     progress = Math.max(0, Math.min(1, progress));
-    const frameIndex = Math.floor(progress * (activeSequenceConfig.total - 1));
-    const targetFrame = activeSequenceConfig.start + frameIndex;
+    const progressFrameFloat = activeSequenceConfig.start + (progress * (activeSequenceConfig.total - 1));
+    const progressFrame = Math.floor(progressFrameFloat);
+    const targetFrame = (typeof forcedFrame === 'number')
+        ? THREE.MathUtils.clamp(Math.floor(forcedFrame), activeSequenceConfig.start, activeSequenceConfig.end)
+        : progressFrame;
+    const targetFrameFloat = (typeof forcedFrame === 'number')
+        ? THREE.MathUtils.clamp(forcedFrame, activeSequenceConfig.start, activeSequenceConfig.end)
+        : progressFrameFloat;
     const blendAlpha = getSequence2BlendAlpha();
     const hasBlendWork = blendAlpha >= 0.01;
 
@@ -298,16 +436,32 @@ function drawSequence(progress) {
 
     if (blendAlpha < 0.01 || !blendCtx) return;
 
-    const targetFrame2 = THREE.MathUtils.clamp(targetFrame, SEQUENCE_2.start, SEQUENCE_2.end);
-    const img2 = getNearestLoadedFrame(sequence2Cache, SEQUENCE_2, targetFrame2);
-    if (!img2) return;
+    // Remap only the idle default timeline segment to sequence_02 so static remains lively at 60fps.
+    const defaultFrameMin = SEQUENCE_TIMELINE.loopStartFrame;
+    const defaultFrameMax = SEQUENCE_TIMELINE.loopEndFrame;
+    const defaultFrameSpan = Math.max(1, defaultFrameMax - defaultFrameMin);
+    const normalizedFrame = THREE.MathUtils.clamp((targetFrameFloat - defaultFrameMin) / defaultFrameSpan, 0, 1);
+    const frame2Float = THREE.MathUtils.lerp(SEQUENCE_2.start, SEQUENCE_2.end, normalizedFrame);
+    const baseFrame2 = THREE.MathUtils.clamp(Math.floor(frame2Float), SEQUENCE_2.start, SEQUENCE_2.end);
+    const nextFrame2 = baseFrame2 >= SEQUENCE_2.end ? SEQUENCE_2.start : baseFrame2 + 1;
+    const frame2Mix = THREE.MathUtils.clamp(frame2Float - baseFrame2, 0, 1);
+
+    const img2Base = getNearestLoadedFrame(sequence2Cache, SEQUENCE_2, baseFrame2);
+    if (!img2Base) return;
+    const img2Next = getNearestLoadedFrame(sequence2Cache, SEQUENCE_2, nextFrame2) || img2Base;
 
     if (blendCanvas.width !== seqCanvas.width || blendCanvas.height !== seqCanvas.height) {
         blendCanvas.width = seqCanvas.width;
         blendCanvas.height = seqCanvas.height;
     }
     blendCtx.clearRect(0, 0, blendCanvas.width, blendCanvas.height);
-    blendCtx.drawImage(img2, sx, sy, sw, sh, 0, 0, blendCanvas.width, blendCanvas.height);
+    blendCtx.globalAlpha = 1;
+    blendCtx.drawImage(img2Base, sx, sy, sw, sh, 0, 0, blendCanvas.width, blendCanvas.height);
+    if (frame2Mix > 0.001) {
+        blendCtx.globalAlpha = frame2Mix;
+        blendCtx.drawImage(img2Next, sx, sy, sw, sh, 0, 0, blendCanvas.width, blendCanvas.height);
+    }
+    blendCtx.globalAlpha = 1;
 
     const mx = ((mouse.x + 1) * 0.5) * blendCanvas.width;
     const my = ((1 - mouse.y) * 0.5) * blendCanvas.height;
@@ -426,7 +580,14 @@ const progressBarFill = document.getElementById("progress-bar");
 const loadingTextEl = document.getElementById("loading-text");
 
 const startupParams = new URLSearchParams(window.location.search);
-const shouldQuickResume = sessionStorage.getItem('skipBootLoader') === '1' || localStorage.getItem('returnTapeIndex') !== null || startupParams.has('action');
+const skipBootLoaderOnce = sessionStorage.getItem('skipBootLoader') === '1';
+if (skipBootLoaderOnce) {
+    sessionStorage.removeItem('skipBootLoader');
+}
+const hasReturnTape = localStorage.getItem('returnTapeIndex') !== null;
+const hasActionParam = startupParams.has('action');
+const shouldQuickResume = skipBootLoaderOnce || hasReturnTape || hasActionParam;
+const shouldSkipPowerOnIntro = hasReturnTape || hasActionParam;
 
 let bootComplete = false;
 let tapesComplete = false;
@@ -442,6 +603,11 @@ if (shouldQuickResume) {
     if (loadingTextEl) loadingTextEl.innerText = "RESUMING ARCHIVE...";
     if (progressBarFill) progressBarFill.style.width = "92%";
     displayedProgress = 92;
+
+    if (shouldSkipPowerOnIntro) {
+        defaultPowerOnPlayed = true;
+        sequenceTimelineFrame = Math.max(sequenceTimelineFrame, SEQUENCE_TIMELINE.loopStartFrame);
+    }
 }
 
 function runFinalLoadStateOnce() {
@@ -622,57 +788,45 @@ tapeLoader.load("models/tape.glb", gltf => {
 window.handleSystemAction = handleSystemAction;
 function handleSystemAction(action) {
     if (state.isLocked) {
-        if (state.selectedTape) {
-            const flip = state.selectedTape.userData.action2;
-            if (flip) {
-                flip.paused = false;
-                flip.timeScale = -1; 
-                flip.play();
-            }
-        }
-        state.isLocked = false;
-        state.selectedTape = null;
-        state.scrollSpeed = 0.1; 
+        clearProjectTransitionTimers();
+        unlockTapeSelection();
+    }
+
+    const isSectionAction = action === 'about' || action === 'contact';
+
+    // About/Contact should switch directly without replaying default 0-20 intro.
+    if (isSectionAction) {
+        pendingMenuAction = null;
+        pendingScrollDelta = 0;
+        pendingSectionSequenceKey = null;
+        activateSectionSequence(action);
+        drawSequence(0);
+        state.targetZoom = 0;
+        return;
+    }
+
+    // If we're in About/Contact, route menu action through default power-on first.
+    if (activeSequenceKey !== 'default') {
+        queueMenuActionThroughPowerOn(action);
+        return;
+    }
+
+    // If power-on is currently playing, queue the latest action and apply it when intro completes.
+    if (!defaultPowerOnPlayed) {
+        pendingMenuAction = action;
+        return;
     }
 
     switch (action) {
         case "home":
             pendingSectionSequenceKey = null;
-            activeSequenceKey = 'default';
-            preloadSequenceByKey('default', false);
-            drawSequence(sequenceTimelineFrame / SEQUENCE_TIMELINE.zoomedLoopEndFrame);
-            state.targetZoom = 0;
-            break;
-        case "about":
-            if (state.zoom > 0.05) {
-                pendingSectionSequenceKey = 'about';
-                activeSequenceKey = 'default';
-                preloadSequenceByKey('default', false);
-            } else {
-                pendingSectionSequenceKey = null;
-                activeSequenceKey = 'about';
-                preloadSequenceByKey('about', false);
-            }
-            drawSequence(sequenceTimelineFrame / SEQUENCE_TIMELINE.zoomedLoopEndFrame);
-            state.targetZoom = 0;
-            break;
-        case "contact":
-            if (state.zoom > 0.05) {
-                pendingSectionSequenceKey = 'contact';
-                activeSequenceKey = 'default';
-                preloadSequenceByKey('default', false);
-            } else {
-                pendingSectionSequenceKey = null;
-                activeSequenceKey = 'contact';
-                preloadSequenceByKey('contact', false);
-            }
+            activateDefaultSequence(); // <-- Updated
             drawSequence(sequenceTimelineFrame / SEQUENCE_TIMELINE.zoomedLoopEndFrame);
             state.targetZoom = 0;
             break;
         case "projects":
             pendingSectionSequenceKey = null;
-            activeSequenceKey = 'default';
-            preloadSequenceByKey('default', false);
+            activateDefaultSequence(); // <-- Updated
             drawSequence(sequenceTimelineFrame / SEQUENCE_TIMELINE.zoomedLoopEndFrame);
             state.targetZoom = 1; 
             break;
@@ -700,26 +854,52 @@ window.addEventListener("mousemove", e => {
 let scrollCooldown = false;
 const SCROLL_DELAY = 50;
 
-window.addEventListener("wheel", e => {
-    if (scrollCooldown) return;
+function applyWheelNavigation(deltaY) {
     const { radius } = cachedConfig;
 
-    if (e.deltaY > 5) {
+    if (deltaY > 5) {
         if (state.targetZoom < 1) {
             state.targetZoom = 1;
-            triggerCooldown();
         } else if (state.targetScroll < numTapes - 1 - radius) {
             state.targetScroll++;
-            triggerCooldown();
         }
-    } else if (e.deltaY < -5) {
+    } else if (deltaY < -5) {
         if (state.targetScroll > radius) {
             state.targetScroll--;
-            triggerCooldown();
         } else {
             state.targetZoom = 0;
-            triggerCooldown();
         }
+    }
+}
+
+window.addEventListener("wheel", e => {
+    if (scrollCooldown) return;
+    if (Math.abs(e.deltaY) <= 5) return;
+
+    // If user scrolls while in About/Contact, play default 0-20 first, then apply scroll intent.
+    if (activeSequenceKey !== 'default') {
+        pendingSectionSequenceKey = null;
+        pendingMenuAction = null;
+        pendingScrollDelta = e.deltaY;
+        activateDefaultSequence({ playPowerOn: true, resetFrame: true });
+        state.targetZoom = 0;
+        triggerCooldown();
+        return;
+    }
+
+    // While default power-on is playing, queue latest scroll and apply after intro completes.
+    if (!defaultPowerOnPlayed) {
+        pendingScrollDelta = e.deltaY;
+        triggerCooldown();
+        return;
+    }
+
+    const prevZoom = state.targetZoom;
+    const prevScroll = state.targetScroll;
+    applyWheelNavigation(e.deltaY);
+
+    if (state.targetZoom !== prevZoom || state.targetScroll !== prevScroll) {
+        triggerCooldown();
     }
 });
 
@@ -757,25 +937,49 @@ window.addEventListener('click', () => {
         state.selectedTape = state.activeTape;
         state.targetScroll = state.activeTape.userData.index;
 
-        setTimeout(() => {
-            const projectData = state.selectedTape.userData.projectInfo;
-            openProjectPage(projectData);
+        projectOpenTimeoutId = setTimeout(() => {
+            projectOpenTimeoutId = null;
+            const selected = state.selectedTape;
+            if (!selected) return;
+            const selectedProjectData = selected.userData.projectInfo;
+            openProjectPage(selectedProjectData);
         }, 1500); 
         
         const hov = state.selectedTape.userData.action1;
         const flip = state.selectedTape.userData.action2;
 
-        setTimeout(() => {
+        flipTimeoutId = setTimeout(() => {
+            flipTimeoutId = null;
             if (flip) {
                 if (hov) hov.stop();
                 flip.reset();
                 flip.setEffectiveWeight(1.0);
                 flip.play();
-                setTimeout(() => { state.targetZoom = 0; }, 500);
+                zoomOutTimeoutId = setTimeout(() => {
+                    zoomOutTimeoutId = null;
+                    state.targetZoom = 0;
+                }, 500);
             }
         }, 400);
     }
 });
+
+window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+        restoreArchiveInteractionState();
+    }
+});
+
+// --- TV HOTSPOT LOGIC ---
+const hotspotContainer = document.getElementById('hotspot-container');
+
+// 1. Wire up the clicks (Power is removed)
+document.getElementById('hotspot-menu')?.addEventListener('click', () => handleSystemAction('home'));
+document.getElementById('hotspot-about')?.addEventListener('click', () => handleSystemAction('about'));
+document.getElementById('hotspot-projects')?.addEventListener('click', () => handleSystemAction('projects'));
+document.getElementById('hotspot-contact')?.addEventListener('click', () => handleSystemAction('contact'));
+
+// 2. Hide them when zooming in (Add this logic inside your Animate loop)
 
 // --- 8. ANIMATE ---
 function animate() {
@@ -787,19 +991,25 @@ function animate() {
     if (state.targetZoom > 0.5) {
         pendingSectionSequenceKey = null;
         if (activeSequenceKey !== 'default') {
-            activeSequenceKey = 'default';
-            preloadSequenceByKey('default', false);
+            activateDefaultSequence({ playPowerOn: false, resetFrame: true });
         }
     }
 
     // 2. Smooth zoom lerp
     state.zoom = THREE.MathUtils.lerp(state.zoom, state.targetZoom, 0.06);
 
+    if (hotspotContainer) {
+        if (state.zoom > 0.1) {
+            hotspotContainer.classList.add('zoomed-in');
+        } else {
+            hotspotContainer.classList.remove('zoomed-in');
+        }
+    }
+
     // 3. APPLY DEFERRED SEQUENCE
     // Only switch to About/Contact once the zoom-out animation has settled completely.
     if (pendingSectionSequenceKey && state.targetZoom === 0 && state.zoom < 0.03) {
-        activeSequenceKey = pendingSectionSequenceKey;
-        preloadSequenceByKey(activeSequenceKey, false);
+        activateSectionSequence(pendingSectionSequenceKey);
         pendingSectionSequenceKey = null;
     }
 
@@ -859,6 +1069,10 @@ function animate() {
     // Lightweight hover highlight (no extra render pass): focused tape bright, others dim.
     tapes.forEach((tape) => {
         const highlighted = hasFocusCandidate && tape.userData.index === focusIndex;
+        const indexDistance = hasFocusCandidate ? Math.abs(tape.userData.index - focusIndex) : 0;
+        const normalizedDistance = THREE.MathUtils.clamp(indexDistance / TAPE_HIGHLIGHT.dimRange, 0, 1);
+        const dimProgress = THREE.MathUtils.smoothstep(normalizedDistance, 0, 1);
+        const dimScalar = THREE.MathUtils.lerp(1, TAPE_HIGHLIGHT.dimOthers, dimProgress);
 
         const mats = tape.userData.highlightMats || [];
         mats.forEach((mat) => {
@@ -870,7 +1084,7 @@ function animate() {
                         TAPE_TMP_COLOR.copy(mat.userData.baseColor).lerp(TAPE_HIGHLIGHT_COLOR, TAPE_HIGHLIGHT.colorLift);
                         mat.color.lerp(TAPE_TMP_COLOR, TAPE_HIGHLIGHT.colorLerp);
                     } else {
-                        TAPE_TMP_COLOR.copy(mat.userData.baseColor).multiplyScalar(TAPE_HIGHLIGHT.dimOthers);
+                        TAPE_TMP_COLOR.copy(mat.userData.baseColor).multiplyScalar(dimScalar);
                         mat.color.lerp(TAPE_TMP_COLOR, TAPE_HIGHLIGHT.colorLerp);
                     }
                 } else {
@@ -921,38 +1135,87 @@ function animate() {
     camera.lookAt(0, 0.8, -10);
 
     // 4. SCRUB THE BACKGROUND SEQUENCE USING ACTUAL CAMERA TRAVEL
-    const framesToAdvance = delta * SEQUENCE_TIMELINE.fps;
-    const loopBoundary = getLoopBoundaryFrame();
-    const cameraTravel = THREE.MathUtils.clamp(
-        (camera.position.z - POS_START.z) / (POS_END.z - POS_START.z),
-        0,
-        1
-    );
+    const activeTimelineFps = activeSequenceKey === 'default'
+        ? SEQUENCE_TIMELINE.fps
+        : SECTION_SEQUENCE_TIMELINE.fps;
+    const framesToAdvance = delta * activeTimelineFps;
 
-    if (cameraTravel >= 0.98 && state.targetZoom > 0.5) {
-        // Fully zoomed in: loop the deep segment.
-        sequenceTimelineFrame += framesToAdvance;
-        if (sequenceTimelineFrame < SEQUENCE_TIMELINE.animEndFrame) {
-            sequenceTimelineFrame = SEQUENCE_TIMELINE.animEndFrame;
-        }
-        if (sequenceTimelineFrame >= SEQUENCE_TIMELINE.zoomedLoopEndFrame) {
-            sequenceTimelineFrame = SEQUENCE_TIMELINE.animEndFrame;
-        }
-    } else if (cameraTravel > 0.02) {
-        // Transition phase directly follows real camera movement.
-        sequenceTimelineFrame = THREE.MathUtils.lerp(
-            loopBoundary,
-            SEQUENCE_TIMELINE.animEndFrame,
-            cameraTravel
+    if (activeSequenceKey === 'default') {
+        const loopBoundary = getLoopBoundaryFrame();
+        const cameraTravel = THREE.MathUtils.clamp(
+            (camera.position.z - POS_START.z) / (POS_END.z - POS_START.z),
+            0,
+            1
         );
-    } else {
-        // Fully zoomed out: loop the idle outer segment.
-        if (sequenceTimelineFrame > loopBoundary) {
-            sequenceTimelineFrame = loopBoundary;
+
+        if (!defaultPowerOnPlayed) {
+            sequenceTimelineFrame += framesToAdvance;
+            if (sequenceTimelineFrame >= SEQUENCE_TIMELINE.powerOnEndFrame) {
+                sequenceTimelineFrame = SEQUENCE_TIMELINE.powerOnEndFrame;
+                defaultPowerOnPlayed = true;
+
+                if (pendingMenuAction) {
+                    const queuedAction = pendingMenuAction;
+                    pendingMenuAction = null;
+                    handleSystemAction(queuedAction);
+                }
+
+                if (pendingScrollDelta !== 0) {
+                    const queuedDelta = pendingScrollDelta;
+                    pendingScrollDelta = 0;
+                    applyWheelNavigation(queuedDelta);
+                }
+            }
+        } else {
+            if (cameraTravel >= 0.98 && state.targetZoom > 0.5) {
+                // Fully zoomed in: loop the deep segment.
+                sequenceTimelineFrame += framesToAdvance;
+                if (sequenceTimelineFrame < SEQUENCE_TIMELINE.animEndFrame) {
+                    sequenceTimelineFrame = SEQUENCE_TIMELINE.animEndFrame;
+                }
+                if (sequenceTimelineFrame >= SEQUENCE_TIMELINE.zoomedLoopEndFrame) {
+                    sequenceTimelineFrame = SEQUENCE_TIMELINE.animEndFrame;
+                }
+            } else if (cameraTravel > 0.02) {
+                // Transition phase directly follows real camera movement.
+                const transitionTarget = THREE.MathUtils.lerp(
+                    loopBoundary,
+                    SEQUENCE_TIMELINE.animEndFrame,
+                    cameraTravel
+                );
+                sequenceTimelineFrame = THREE.MathUtils.lerp(sequenceTimelineFrame, transitionTarget, 0.2);
+            } else {
+                // Fully zoomed out: loop the idle segment that now starts after power-on.
+                if (sequenceTimelineFrame > loopBoundary) {
+                    sequenceTimelineFrame = loopBoundary;
+                }
+                if (sequenceTimelineFrame < SEQUENCE_TIMELINE.loopStartFrame) {
+                    sequenceTimelineFrame = SEQUENCE_TIMELINE.loopStartFrame;
+                }
+                sequenceTimelineFrame += framesToAdvance;
+                if (sequenceTimelineFrame > loopBoundary) {
+                    sequenceTimelineFrame = SEQUENCE_TIMELINE.loopStartFrame;
+                }
+            }
         }
-        sequenceTimelineFrame += framesToAdvance;
-        if (sequenceTimelineFrame > loopBoundary) {
-            sequenceTimelineFrame = 0;
+    } else {
+        if (!sectionIntroPlayed) {
+            sequenceTimelineFrame += framesToAdvance;
+            if (sequenceTimelineFrame >= SECTION_SEQUENCE_TIMELINE.introEndFrame) {
+                sequenceTimelineFrame = SECTION_SEQUENCE_TIMELINE.introEndFrame;
+                sectionIntroPlayed = true;
+            }
+        } else {
+            if (sequenceTimelineFrame < SECTION_SEQUENCE_TIMELINE.loopStartFrame) {
+                sequenceTimelineFrame = SECTION_SEQUENCE_TIMELINE.loopStartFrame;
+            }
+
+            sequenceTimelineFrame += framesToAdvance;
+
+            const loopLength = SECTION_SEQUENCE_TIMELINE.loopEndFrameExclusive - SECTION_SEQUENCE_TIMELINE.loopStartFrame;
+            if (loopLength > 0 && sequenceTimelineFrame >= SECTION_SEQUENCE_TIMELINE.loopEndFrameExclusive) {
+                sequenceTimelineFrame = SECTION_SEQUENCE_TIMELINE.loopStartFrame + ((sequenceTimelineFrame - SECTION_SEQUENCE_TIMELINE.loopStartFrame) % loopLength);
+            }
         }
     }
 
