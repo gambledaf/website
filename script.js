@@ -4,8 +4,18 @@ import { RenderPass } from "https://esm.sh/three@0.129.0/examples/jsm/postproces
 import { EffectComposer } from "https://esm.sh/three@0.129.0/examples/jsm/postprocessing/EffectComposer.js";
 import { UnrealBloomPass } from "https://esm.sh/three@0.129.0/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutlinePass } from "https://esm.sh/three@0.129.0/examples/jsm/postprocessing/OutlinePass.js";
-import { setupSceneLights } from './js/lights.js';
-import { projectData } from './js/files.js';
+
+const moduleVersion = new URL(import.meta.url).searchParams.get('v') || '';
+const withVersion = (path) => {
+    if (!moduleVersion) return path;
+    const sep = path.includes('?') ? '&' : '?';
+    return `${path}${sep}v=${encodeURIComponent(moduleVersion)}`;
+};
+
+const [{ setupSceneLights }, { projectData }] = await Promise.all([
+    import(withVersion('./js/lights.js')),
+    import(withVersion('./js/files.js'))
+]);
 
 // --- 1. SHARED HELPERS & STATE ---
 function getVisibleConfig() {

@@ -4,7 +4,7 @@
     <script>
         (() => {
             const VERSION_KEY = 'portfolio_version';
-            const RELOAD_GUARD_KEY = 'portfolio_reload_once';
+            const RELOAD_GUARD_KEY = 'portfolio_reload_guard';
 
             const readStorage = (storage, key) => {
                 try {
@@ -24,8 +24,15 @@
 
             const readLocalVersion = () => readStorage(window.localStorage, VERSION_KEY) || '';
             const writeLocalVersion = (value) => writeStorage(window.localStorage, VERSION_KEY, value);
-            const hasReloadedThisTab = () => readStorage(window.sessionStorage, RELOAD_GUARD_KEY) === '1';
-            const markReloadedThisTab = () => writeStorage(window.sessionStorage, RELOAD_GUARD_KEY, '1');
+            const readReloadGuard = () => readStorage(window.sessionStorage, RELOAD_GUARD_KEY) || '';
+            const writeReloadGuard = (value) => writeStorage(window.sessionStorage, RELOAD_GUARD_KEY, value);
+            const clearReloadGuard = () => {
+                try {
+                    window.sessionStorage.removeItem(RELOAD_GUARD_KEY);
+                } catch {
+                    // Ignore storage failures.
+                }
+            };
 
             const initialVersion = readLocalVersion();
             window.__portfolioVersion = initialVersion;
@@ -60,17 +67,19 @@
 
                     if (localVersion === liveVersion) {
                         window.__portfolioVersion = liveVersion;
+                        if (readReloadGuard() === liveVersion) {
+                            clearReloadGuard();
+                        }
                         return;
                     }
 
                     writeLocalVersion(liveVersion);
                     window.__portfolioVersion = liveVersion;
 
-                    if (hasReloadedThisTab()) return;
-
                     const url = new URL(window.location.href);
+                    if (readReloadGuard() === liveVersion) return;
                     if (url.searchParams.get('v') === liveVersion) return;
-                    markReloadedThisTab();
+                    writeReloadGuard(liveVersion);
                     url.searchParams.set('v', liveVersion);
                     window.location.replace(url.toString());
                 })
