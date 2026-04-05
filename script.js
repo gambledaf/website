@@ -59,6 +59,11 @@ const state = {
 let projectOpenTimeoutId = null;
 let flipTimeoutId = null;
 let zoomOutTimeoutId = null;
+const LOCK_CENTER_SCROLL_SPEED = 0.04;
+const LOCK_FOCUS_SCROLL_SPEED = 0.03;
+const LOCK_CENTER_EPSILON = 0.02;
+const LOCK_CENTER_MAX_WAIT_MS = 1000;
+const LOCK_CENTER_POLL_MS = 16;
 
 function clearProjectTransitionTimers() {
     if (projectOpenTimeoutId) {
@@ -939,7 +944,6 @@ function onTapeDragStart(e) {
     dragState.startX = e.clientX;
     dragState.lastX = e.clientX;
     dragState.pointerId = e.pointerId;
-    dragState.hoverSuppressUntil = performance.now() + DRAG_HOVER_SUPPRESS_MS;
     dragState.awaitingHoverRearm = false;
     zoomOutIntent = 0;
 
@@ -988,10 +992,11 @@ function onTapeDragEnd(e) {
         dragState.suppressClickUntil = performance.now() + DRAG_CLICK_SUPPRESS_MS;
         dragState.awaitingHoverRearm = true;
         dragState.releaseX = typeof e?.clientX === 'number' ? e.clientX : dragState.lastX;
+        dragState.hoverSuppressUntil = performance.now() + DRAG_HOVER_SUPPRESS_MS;
     } else {
         dragState.awaitingHoverRearm = false;
+        dragState.hoverSuppressUntil = 0;
     }
-    dragState.hoverSuppressUntil = performance.now() + DRAG_HOVER_SUPPRESS_MS;
 
     if (renderer?.domElement?.releasePointerCapture && dragState.pointerId !== null) {
         try {
@@ -1111,9 +1116,14 @@ window.addEventListener('click', () => {
 
     if (state.zoom > 0.9 && state.activeTape && !state.isLocked) {
         state.isLocked = true;
-        state.scrollSpeed = 0.03;
+        
+        // Use the smooth glide speed
+        state.scrollSpeed = LOCK_CENTER_SCROLL_SPEED; 
         state.selectedTape = state.activeTape;
         state.targetScroll = state.activeTape.userData.index;
+
+        // Keep the fix that instantly straightens the tape!
+        state.activeTape.rotation.set(0, 0, 0);
 
         projectOpenTimeoutId = setTimeout(() => {
             projectOpenTimeoutId = null;
@@ -1126,6 +1136,7 @@ window.addEventListener('click', () => {
         const hov = state.selectedTape.userData.action1;
         const flip = state.selectedTape.userData.action2;
 
+        // RESTORED: The classic, snappy 400ms timing with no weird math delays!
         flipTimeoutId = setTimeout(() => {
             flipTimeoutId = null;
             if (flip) {
@@ -1163,7 +1174,7 @@ document.getElementById('hotspot-contact')?.addEventListener('click', () => hand
 function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
-    const hoverSuppressed = dragState.active || dragState.awaitingHoverRearm || performance.now() < dragState.hoverSuppressUntil;
+    const hoverSuppressed = dragState.moved || dragState.awaitingHoverRearm || performance.now() < dragState.hoverSuppressUntil;
 
     // 1. SCROLL WHEEL OVERRIDE
     // If the mouse wheel pushes us towards the tapes (zoom > 0.5), force the default sequence.
@@ -1291,7 +1302,7 @@ function animate() {
 
         const isHoveredTape = canTiltActiveTape && tape === state.activeTape;
         const targetRotX = isHoveredTape ? -mouse.y * 0.15 : 0;
-        const targetRotY = isHoveredTape ? -mouse.x * 0.20 : 0;
+        const targetRotY = isHoveredTape ? mouse.x * 0.20 : 0;
 
         tape.rotation.x = THREE.MathUtils.lerp(tape.rotation.x, targetRotX, 0.1);
         tape.rotation.y = THREE.MathUtils.lerp(tape.rotation.y, targetRotY, 0.1);
