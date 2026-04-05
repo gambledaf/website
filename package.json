@@ -1,0 +1,30 @@
+{
+  "name": "personal_website_02",
+  "version": "1.0.0",
+  "description": "3D Portfolio Website",
+  "main": "script.js",
+  "scripts": {
+    "bump:version": "node scripts/bump-version.mjs",
+    "predeploy": "npm run bump:version",
+    "deploy": "gh-pages -d ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gambledaf/website.git"
+  },
+  "keywords": [
+    "threejs",
+    "portfolio",
+    "3d-art"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/gambledaf/website/issues"
+  },
+  "homepage": "https://gambledaf.github.io/website/",
+  "devDependencies": {
+    "gh-pages": "^6.3.0"
+  }
+}

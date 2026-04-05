@@ -1,0 +1,459 @@
+/* ========================================== */
+/* 1. SYSTEM VARIABLES & FONTS                */
+/* ========================================== */
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap');
+
+:root {
+    /* Colors */
+    --crt-green: #00ff44;
+    --crt-green-dim: rgba(0, 255, 68, 0.2);
+    --crt-green-rgb: 0, 255, 68;
+    --bg-dark: #030c08;
+    --bg-black: #010604;
+
+    /* Header/Logo Spacing */
+    --nav-top: 0px;
+    --nav-right: 0px;
+    --nav-height: 88px;
+    --logo-top: calc(var(--nav-top) + (var(--nav-height) - var(--logo-size)) / 2);
+    --logo-left: 10px;
+    --logo-size: 150px;
+
+    /* Global Transition */
+    --smooth: 0.3s ease;
+}
+
+@font-face {
+    font-family: 'RechargeBold';
+    src: local('Recharge Bold'), local('RechargeBold');
+}
+
+@font-face {
+    font-family: 'Handodle';
+    src:
+        local('Handodle-rg38A'),
+        local('Handodle rg38A'),
+        local('Handodle'),
+        url('Handodle-rg38A.ttf') format('truetype');
+    font-display: swap;
+}
+
+/* ========================================== */
+/* 2. GLOBAL RESET                            */
+/* ========================================== */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: #000;
+    color: var(--crt-green);
+    font-family: 'VT323', monospace;
+    overflow-x: hidden; /* Prevent horizontal scroll */
+}
+
+/* ========================================== */
+/* 3. THE BACKDROP LAYERS (SCROLL ENGINE)     */
+/* ========================================== */
+
+/* Invisible track that allows the page to scroll */
+#scroll-track {
+    height: 600vh; 
+    width: 100%;
+    pointer-events: none;
+}
+
+/* LAYER 1: The Image Sequence (Bottom) */
+#sequence-canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 1;
+    background: #000;
+}
+
+/* LAYER 2: The Three.js Tapes (Middle) */
+#bg-canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: transparent;
+    mix-blend-mode: normal;
+    z-index: 2;
+    pointer-events: auto; /* Allows clicking on 3D tapes */
+}
+
+/* ========================================== */
+/* 4. OVERSEER LOADING SCREEN                 */
+/* ========================================== */
+#loading-screen {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 9999;
+    background: radial-gradient(circle at center, #051a11 0%, var(--bg-black) 100%);
+    display: flex; justify-content: center; align-items: center;
+    padding: clamp(0.75rem, 2.5vw, 2rem);
+    transition: opacity 0.5s ease;
+}
+
+/* CRT Pixel Grid Overlay */
+#loading-screen::after {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.4) 2px, rgba(0, 0, 0, 0.4) 4px);
+    pointer-events: none;
+    z-index: 10;
+}
+
+.monitor-frame {
+    position: relative;
+    width: 100%; height: 100%;
+    border: 2px solid var(--crt-green);
+    box-shadow: 0 0 15px var(--crt-green-dim), inset 0 0 15px var(--crt-green-dim);
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    z-index: 5;
+}
+
+.terminal-text {
+    position: absolute;
+    top: clamp(10px, 2.2vh, 20px);
+    left: clamp(10px, 2.4vw, 30px);
+}
+
+.terminal-text p {
+    font-family: "Courier New", Courier, monospace !important;
+    color: var(--crt-green);
+    font-size: clamp(0.8rem, 1.8vw, 1.5rem);
+    text-shadow: 0 0 5px var(--crt-green);
+    margin: 5px 0;
+}
+
+.styled-logo-image {
+    width: min(1500px, 88vw);
+    max-height: 38vh;
+    min-height: 120px;
+    aspect-ratio: 2 / 1;
+    background-color: var(--crt-green);
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    filter: drop-shadow(0 0 15px rgba(0, 255, 100, 0.8));
+}
+
+.neon-divider {
+    width: min(900px, 82vw);
+    height: 2px;
+    background-color: var(--crt-green);
+    box-shadow: 0 0 10px var(--crt-green), 0 0 20px var(--crt-green);
+    margin: -2vh 0 10vh 0;
+}
+
+.progress-box {
+    width: min(400px, 80vw);
+    height: clamp(16px, 2.6vh, 25px);
+    border: 3px solid var(--crt-green);
+    padding: 3px;
+}
+
+.progress-fill {
+    height: 100%;
+    background-color: var(--crt-green);
+    box-shadow: 0 0 15px var(--crt-green);
+}
+
+/* ========================================== */
+/* 5. RETRO TERMINAL HEADER (NAVBAR)          */
+/* ========================================== */
+.retro-header {
+    position: fixed;
+    top: var(--nav-top);
+    left: 0;
+    right: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 22px;
+    font-family: 'VT323', monospace;
+    padding: 0 58px 0 calc(var(--logo-left) + var(--logo-size) + 28px);
+    min-height: var(--nav-height);
+    transition: transform 0.24s ease, opacity 0.24s ease;
+}
+
+.retro-nav-links {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: auto;
+    gap: 20px;
+    min-height: calc(var(--nav-height) - 12px);
+    padding: 0 20px;
+    background-color: transparent;
+    background-image: url('images/bar.png');
+    background-repeat: no-repeat;
+    background-position: center 56%;
+    background-size: 100% 100%;
+}
+
+.retro-logo {
+    position: fixed;
+    top: var(--logo-top);
+    left: var(--logo-left);
+    z-index: 202;
+    transition: transform 0.24s ease, opacity 0.24s ease;
+}
+
+.retro-header.nav-is-hidden,
+.retro-logo.nav-is-hidden {
+    transform: translateY(-130%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.retro-logo-image {
+    height: var(--logo-size);
+    filter: none;
+    opacity: 0.92;
+    transition: opacity 0.2s ease;
+}
+
+.retro-logo:hover .retro-logo-image {
+    opacity: 1;
+}
+
+.retro-nav-links a {
+    color: #050505 !important;
+    text-decoration: none;
+    font-family: 'Handodle', 'Caveat', 'VT323', cursive;
+    font-size: 1.5rem;
+    letter-spacing: 0.02em;
+    text-shadow: none;
+    transition: var(--smooth), text-decoration-color var(--smooth);
+    opacity: 0.95;
+}
+
+.retro-nav-links a:hover {
+    opacity: 1;
+    text-shadow: none;
+    text-decoration: line-through;
+    text-decoration-thickness: 2px;
+    text-decoration-color: rgba(0, 0, 0, 0.85);
+}
+
+/* ========================================== */
+/* 6. HUD / TAPE HOVER UI                     */
+/* ========================================== */
+#tape-hover-ui {
+    position: fixed;
+    top: 15%;
+    left: 8%;
+    color: var(--crt-green);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: 50;
+}
+
+#tape-hover-ui.visible { opacity: 1; }
+
+.hud-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 20px;
+    margin-bottom: 8px;
+}
+
+.hover-desc {
+    color: #fff;
+    font-size: 14px;
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+    margin-left: 32px;
+}
+
+/* ========================================== */
+/* 7. ANIMATIONS & UTILITIES                  */
+/* ========================================== */
+.scanline-bar {
+    position: absolute;
+    top: -100px; left: 0; width: 100%;
+    height: 12vh;
+    background: linear-gradient(to bottom, transparent, rgba(0, 255, 68, 0.1), transparent);
+    animation: scanline-scroll 6s linear infinite;
+    z-index: 11;
+}
+
+@keyframes scanline-scroll {
+    0% { transform: translateY(-100vh); }
+    100% { transform: translateY(200vh); }
+}
+
+.blink-block, .blinking-cursor {
+    animation: blinker 1s steps(2, start) infinite;
+}
+
+/* --- INVISIBLE MAIN SCREEN HOTSPOTS (BULLETPROOF SCALING) --- */
+#hotspot-container {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%); /* Centers the virtual wrapper perfectly */
+    
+    /* THE MAGIC MATH: Mimics a 16:9 Canvas Cover Crop */
+    width: 100vw;
+    height: 56.25vw; 
+    min-height: 100vh;
+    min-width: 177.77vh; 
+    
+    z-index: 40;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+#hotspot-container.zoomed-in {
+    opacity: 0;
+    pointer-events: none !important;
+}
+
+/* ADD THIS NEW BLOCK */
+/* Forces the child hotspots to deactivate when the parent fades out */
+#hotspot-container.zoomed-in .tv-hotspot {
+    pointer-events: none !important;
+}
+
+/* 1. THE INVISIBLE DETECTION AREA (The Hitbox) */
+.tv-hotspot {
+    position: absolute;
+    pointer-events: auto;
+    cursor: pointer;
+    
+    /* Make this large enough to easily catch the mouse */
+    width: 3.5%; 
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    
+    /* Completely transparent */
+    border: none; 
+    background-color: transparent; 
+
+    /* Optional: Uncomment the line below if you want to see the yellow detection circles while debugging */
+    /* border: 1px dashed rgba(255, 255, 0, 0.4); */
+}
+
+/* 2. THE VISUAL RECTANGLE (Final Stealth Mode) */
+.tv-glow-box {
+    position: absolute;
+    /* Centers the rectangle perfectly inside the detection circle */
+    top: 58%; left: 50%;
+    transform: translate(-50%, -50%);
+    
+    width: 85%; 
+    height: 30%; 
+    border-radius: 3px;
+    transition: all 0.2s ease;
+    
+    /* 1. THE ANTI-FLICKER FIX: Forces the mouse to only talk to the outer circle */
+    pointer-events: none; 
+    
+    /* 2. Base state: invisible */
+    background-color: transparent;
+}
+
+/* 3. THE MAGIC HOVER LOGIC (Whitish Glow, No Border) */
+.tv-hotspot:hover .tv-glow-box {
+    /* 3. Pure whitish semi-transparent fill, no hard borders! */
+    background-color: rgba(255, 255, 255, 0.45); 
+    
+    /* Soft white outer glow + subtle inner glow */
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.7), 
+                inset 0 0 10px rgba(255, 255, 255, 0.5);
+}
+
+/* NOW WE USE SIMPLE PERCENTAGES! */
+/* 0% is the bottom/left of the image, 100% is the top/right */
+#hotspot-menu     { bottom: 31%; left: 43.8%; }
+#hotspot-about    { bottom: 31%; left: 46.9%; }
+#hotspot-projects { bottom: 31%; left: 50%; }
+#hotspot-contact  { bottom: 31%; left: 53%; }
+
+@keyframes blinker { to { visibility: hidden; } }
+
+/* ========================================== */
+/* 8. RESPONSIVE QUERIES                      */
+/* ========================================== */
+@media (max-width: 768px) {
+    .terminal-text, .scanline-bar { display: none; }
+    .monitor-frame { border-width: 1px; }
+    .retro-header {
+        top: 0;
+        left: 0;
+        right: 0;
+        min-height: 56px;
+        padding: 8px 10px 8px 112px;
+        gap: 10px;
+    }
+    .retro-nav-links {
+        min-height: 56px;
+        gap: 8px;
+        padding: 0 10px;
+        background-position: center 58%;
+    }
+    .retro-logo {
+        top: 2px;
+        left: 10px;
+    }
+    .retro-logo-image { height: 52px; }
+}
+/* --- FIXED CENTER LAYOUT --- */
+.center-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%; /* Uses the full monitor frame */
+    margin: 0 auto;
+}
+
+.neon-divider {
+    width: 60%; /* Scales cleanly with the screen */
+    max-width: 800px;
+    height: 2px;
+    background-color: var(--crt-green);
+    box-shadow: 0 0 10px var(--crt-green), 0 0 20px var(--crt-green);
+    margin: 40px auto; /* Forces strict horizontal centering */
+}
+
+.progress-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
+.progress-container p {
+    font-family: 'RechargeBold', monospace;
+    color: var(--crt-green);
+    font-size: clamp(1rem, 2.8vw, 2rem);
+    margin-bottom: 15px;
+    text-shadow: 0 0 8px var(--crt-green);
+    text-align: center;
+}
+
+.progress-box {
+    width: 80%;
+    max-width: 400px;
+    height: clamp(16px, 2.6vh, 25px);
+    border: 3px solid var(--crt-green);
+    box-shadow: 0 0 10px var(--crt-green-dim), inset 0 0 10px var(--crt-green-dim);
+    padding: 3px;
+    margin: 0 auto; /* Forces strict horizontal centering */
+    box-sizing: border-box;
+}

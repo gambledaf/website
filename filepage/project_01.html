@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script>
+        (() => {
+            const VERSION_KEY = 'portfolio_version';
+            const RELOAD_GUARD_KEY = 'portfolio_reload_guard';
+
+            const initialVersion = localStorage.getItem(VERSION_KEY) || '';
+            window.__portfolioVersion = initialVersion;
+            window.getVersionedAssetUrl = (path) => {
+                const version = window.__portfolioVersion || localStorage.getItem(VERSION_KEY) || '';
+                if (!version) return path;
+                const sep = path.includes('?') ? '&' : '?';
+                return `${path}${sep}v=${encodeURIComponent(version)}`;
+            };
+
+            fetch(`../version.json?ts=${Date.now()}`, {
+                cache: 'no-store',
+                headers: { 'Cache-Control': 'no-cache' }
+            })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`Version fetch failed: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then((data) => {
+                    const liveVersion = (typeof data?.version === 'string') ? data.version.trim() : '';
+                    if (!liveVersion) return;
+
+                    const localVersion = localStorage.getItem(VERSION_KEY);
+
+                    if (!localVersion) {
+                        localStorage.setItem(VERSION_KEY, liveVersion);
+                        window.__portfolioVersion = liveVersion;
+                        return;
+                    }
+
+                    if (localVersion === liveVersion) {
+                        window.__portfolioVersion = liveVersion;
+                        if (sessionStorage.getItem(RELOAD_GUARD_KEY) === liveVersion) {
+                            sessionStorage.removeItem(RELOAD_GUARD_KEY);
+                        }
+                        return;
+                    }
+
+                    localStorage.setItem(VERSION_KEY, liveVersion);
+                    window.__portfolioVersion = liveVersion;
+
+                    if (sessionStorage.getItem(RELOAD_GUARD_KEY) === liveVersion) return;
+                    sessionStorage.setItem(RELOAD_GUARD_KEY, liveVersion);
+
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('v', liveVersion);
+                    window.location.replace(url.toString());
+                })
+                .catch(() => {
+                    // Keep current cached version token on temporary network failures.
+                });
+        })();
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARCHIVE // DESIGN_01</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    
+    <script>
+        document.write('<link rel="stylesheet" href="' + window.getVersionedAssetUrl('../style.css') + '">');
+        document.write('<link rel="stylesheet" href="' + window.getVersionedAssetUrl('../project.css') + '">');
+    </script>
+</head>
+<body>
+
+    <main class="crt-window">
+        
+        <header class="window-header">
+            <span class="glitch-text">> ARCHIVE_FILE: DESIGN_01.DAT</span>
+            <span>[ STATUS: DECRYPTED ]</span>
+        </header>
+
+        <div class="project-grid">
+
+            <div class="media-module">
+                <div class="image-frame">
+                    <img src="https://picsum.photos/seed/project-01/1920/1080" alt="Project Image 1" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: PRIMARY_VISUAL</p>
+                    <p>> NOTES: Structural integrity confirmed. Color grading matches expected parameters.</p>
+                </div>
+            </div>
+
+            <div class="media-module">
+                <div class="image-frame">
+                    <img src="https://picsum.photos/seed/project-02/1920/1080" alt="Project Image 2" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: SECONDARY_VISUAL</p>
+                    <p>> NOTES: Alternate angle. Notice the geometric framing and harsh lighting contrast.</p>
+                </div>
+            </div>
+             <div class="media-module">
+                <div class="image-frame">
+                    <img src="https://picsum.photos/seed/project-03/1080/1920" alt="Project Image 2" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: SECONDARY_VISUAL</p>
+                    <p>> NOTES: Alternate angle. Notice the geometric framing and harsh lighting contrast.</p>
+                </div>
+            </div>
+             <div class="media-module">
+                <div class="image-frame">
+                    <img src="https://picsum.photos/seed/project-04/1920/1080" alt="Project Image 2" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: SECONDARY_VISUAL</p>
+                    <p>> NOTES: Alternate angle. Notice the geometric framing and harsh lighting contrast.</p>
+                </div>
+            </div>
+             <div class="media-module">
+                <div class="image-frame">
+                    <img src="https://picsum.photos/seed/project-05/1080/1920" alt="Project Image 2" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: SECONDARY_VISUAL</p>
+                    <p>> NOTES: Alternate angle. Notice the geometric framing and harsh lighting contrast.</p>
+                </div>
+            </div>
+             <div class="media-module">
+                <div class="image-frame">
+                    <img src="https://picsum.photos/seed/project-06/1920/1080" alt="Project Image 2" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: SECONDARY_VISUAL</p>
+                    <p>> NOTES: Alternate angle. Notice the geometric framing and harsh lighting contrast.</p>
+                </div>
+            </div>
+             <div class="media-module">
+                <div class="image-frame">
+                    <img src="https://picsum.photos/seed/project-07/1080/1920" alt="Project Image 2" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: SECONDARY_VISUAL</p>
+                    <p>> NOTES: Alternate angle. Notice the geometric framing and harsh lighting contrast.</p>
+                </div>
+            </div>
+
+            <div class="media-module scroll-gallery-module">
+                <div class="module-desc">
+                    <p>> ELEMENT: REFERENCE_SCROLL_GALLERY</p>
+                    <p>> NOTES: Use navigation buttons to browse extra visuals.</p>
+                </div>
+                <div class="gallery-stage">
+                    <button type="button" class="gallery-nav prev" aria-label="Previous gallery image">[ < ]</button>
+                    <div class="gallery-strip">
+                        <div class="gallery-item"><img src="https://picsum.photos/seed/gallery-31/1920/1080" alt="Gallery Image 1" class="zoomable"></div>
+                        <div class="gallery-item"><img src="https://picsum.photos/seed/gallery-32/1080/1920" alt="Gallery Image 2" class="zoomable"></div>
+                        <div class="gallery-item"><img src="https://picsum.photos/seed/gallery-33/1920/1080" alt="Gallery Image 3" class="zoomable"></div>
+                        <div class="gallery-item"><img src="https://picsum.photos/seed/gallery-34/1080/1920" alt="Gallery Image 4" class="zoomable"></div>
+                        <div class="gallery-item"><img src="https://picsum.photos/seed/gallery-35/1920/1080" alt="Gallery Image 5" class="zoomable"></div>
+                        <div class="gallery-item"><img src="https://picsum.photos/seed/gallery-36/1080/1920" alt="Gallery Image 6" class="zoomable"></div>
+                        <div class="gallery-item"><img src="https://picsum.photos/seed/gallery-37/1920/1080" alt="Gallery Image 7" class="zoomable"></div>
+                    </div>
+                    <button type="button" class="gallery-nav next" aria-label="Next gallery image">[ > ]</button>
+                </div>
+            </div>
+
+            <div class="media-module">
+                <div class="image-frame">
+                    <img src="https://picsum.photos/seed/project-08/1080/1920" alt="Project Image 2" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: SECONDARY_VISUAL</p>
+                    <p>> NOTES: Alternate angle. Notice the geometric framing and harsh lighting contrast.</p>
+                </div>
+            </div> <div class="media-module">
+                <div class="image-frame">
+                    <img src="https://picsum.photos/seed/project-09/1920/1080" alt="Project Image 2" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: SECONDARY_VISUAL</p>
+                    <p>> NOTES: Alternate angle. Notice the geometric framing and harsh lighting contrast.</p>
+                </div>
+            </div> <div class="media-module">
+                <div class="image-frame">
+                    <img src="https://picsum.photos/seed/project-10/1080/1920" alt="Project Image 2" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: SECONDARY_VISUAL</p>
+                    <p>> NOTES: Alternate angle. Notice the geometric framing and harsh lighting contrast.</p>
+                </div>
+            </div>
+
+              <div class="media-module">
+                <div class="image-frame">
+                                        <img src="https://picsum.photos/seed/project-11/1920/1080" alt="Project Image 2" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: SECONDARY_VISUAL</p>
+                    <p>> NOTES: Alternate angle. Notice the geometric framing and harsh lighting contrast.</p>
+                </div>
+            </div>
+              <div class="media-module">
+                <div class="image-frame">
+                                        <img src="https://picsum.photos/seed/project-12/1080/1920" alt="Project Image 2" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: SECONDARY_VISUAL</p>
+                    <p>> NOTES: Alternate angle. Notice the geometric framing and harsh lighting contrast.</p>
+                </div>
+            </div>
+
+              <div class="media-module">
+                <div class="image-frame">
+                                        <img src="https://picsum.photos/seed/project-13/1920/1080" alt="Project Image 2" class="scalable-media zoomable">
+                </div>
+                <div class="module-desc">
+                    <p>> ELEMENT: SECONDARY_VISUAL</p>
+                    <p>> NOTES: Alternate angle. Notice the geometric framing and harsh lighting contrast.</p>
+                </div>
+            </div>
+
+            <div class="media-module video-module">
+                <div class="module-desc top-desc">
+                    <p>> ELEMENT: MOTION_TEST_FINAL</p>
+                    <p>> PLAYBACK: INITIALIZING...</p>
+                </div>
+                <div class="video-frame">
+                    <iframe src="https://www.youtube.com/embed/jNQXAC9IVRw?autoplay=0&mute=1" 
+                            class="scalable-media" frameborder="0" allowfullscreen>
+                    </iframe>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <div id="lightbox" class="lightbox-overlay" style="display: none;">
+        <span id="close-lightbox">[X]</span>
+        <img id="lightbox-img" src="" alt="Full Screen">
+    </div>
+
+    <script>
+        document.write('<script src="' + window.getVersionedAssetUrl('../navbar.js') + '"><\\/script>');
+        document.write('<script src="' + window.getVersionedAssetUrl('../js/project.js') + '"><\\/script>');
+    </script>
+</body>
+</html>

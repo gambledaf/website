@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script>
+        (() => {
+            const VERSION_KEY = 'portfolio_version';
+            const RELOAD_GUARD_KEY = 'portfolio_reload_guard';
+
+            const initialVersion = localStorage.getItem(VERSION_KEY) || '';
+            window.__portfolioVersion = initialVersion;
+            window.getVersionedAssetUrl = (path) => {
+                const version = window.__portfolioVersion || localStorage.getItem(VERSION_KEY) || '';
+                if (!version) return path;
+                const sep = path.includes('?') ? '&' : '?';
+                return `${path}${sep}v=${encodeURIComponent(version)}`;
+            };
+
+            fetch(`../version.json?ts=${Date.now()}`, {
+                cache: 'no-store',
+                headers: { 'Cache-Control': 'no-cache' }
+            })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`Version fetch failed: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then((data) => {
+                    const liveVersion = (typeof data?.version === 'string') ? data.version.trim() : '';
+                    if (!liveVersion) return;
+
+                    const localVersion = localStorage.getItem(VERSION_KEY);
+
+                    if (!localVersion) {
+                        localStorage.setItem(VERSION_KEY, liveVersion);
+                        window.__portfolioVersion = liveVersion;
+                        return;
+                    }
+
+                    if (localVersion === liveVersion) {
+                        window.__portfolioVersion = liveVersion;
+                        if (sessionStorage.getItem(RELOAD_GUARD_KEY) === liveVersion) {
+                            sessionStorage.removeItem(RELOAD_GUARD_KEY);
+                        }
+                        return;
+                    }
+
+                    localStorage.setItem(VERSION_KEY, liveVersion);
+                    window.__portfolioVersion = liveVersion;
+
+                    if (sessionStorage.getItem(RELOAD_GUARD_KEY) === liveVersion) return;
+                    sessionStorage.setItem(RELOAD_GUARD_KEY, liveVersion);
+
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('v', liveVersion);
+                    window.location.replace(url.toString());
+                })
+                .catch(() => {
+                    // Keep current cached version token on temporary network failures.
+                });
+        })();
+    </script>
+    <meta charset="UTF-8">
+    <title>Project 02</title>
+    <script>
+        document.write('<link rel="stylesheet" href="' + window.getVersionedAssetUrl('../style.css') + '">');
+    </script>
+</head>
+<body>
+
+    <a href="../index.html" class="back-btn" id="eject-btn">■ EJECT & RETURN</a>
+
+    <script>
+        document.write('<script src="' + window.getVersionedAssetUrl('../navbar.js') + '"><\\/script>');
+    </script>
+
+    <script>
+        // Optional: Your Eject & Return memory script from earlier, updated with ../
+        document.getElementById('eject-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            localStorage.setItem('returnTapeIndex', 1); // Use 0 for project_01, 1 for project_02
+            document.body.style.transition = "opacity 0.5s ease";
+            document.body.style.opacity = "0";
+            setTimeout(() => { window.location.href = "../index.html"; }, 500);
+        });
+    </script>
+</body>
+</html>

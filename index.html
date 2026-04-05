@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script>
+        (() => {
+            const VERSION_KEY = 'portfolio_version';
+            const RELOAD_GUARD_KEY = 'portfolio_reload_guard';
+
+            const initialVersion = localStorage.getItem(VERSION_KEY) || '';
+            window.__portfolioVersion = initialVersion;
+            window.getVersionedAssetUrl = (path) => {
+                const version = window.__portfolioVersion || localStorage.getItem(VERSION_KEY) || '';
+                if (!version) return path;
+                const sep = path.includes('?') ? '&' : '?';
+                return `${path}${sep}v=${encodeURIComponent(version)}`;
+            };
+
+            fetch(`version.json?ts=${Date.now()}`, {
+                cache: 'no-store',
+                headers: { 'Cache-Control': 'no-cache' }
+            })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`Version fetch failed: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then((data) => {
+                    const liveVersion = (typeof data?.version === 'string') ? data.version.trim() : '';
+                    if (!liveVersion) return;
+
+                    const localVersion = localStorage.getItem(VERSION_KEY);
+
+                    if (!localVersion) {
+                        localStorage.setItem(VERSION_KEY, liveVersion);
+                        window.__portfolioVersion = liveVersion;
+                        return;
+                    }
+
+                    if (localVersion === liveVersion) {
+                        window.__portfolioVersion = liveVersion;
+                        if (sessionStorage.getItem(RELOAD_GUARD_KEY) === liveVersion) {
+                            sessionStorage.removeItem(RELOAD_GUARD_KEY);
+                        }
+                        return;
+                    }
+
+                    localStorage.setItem(VERSION_KEY, liveVersion);
+                    window.__portfolioVersion = liveVersion;
+
+                    if (sessionStorage.getItem(RELOAD_GUARD_KEY) === liveVersion) return;
+                    sessionStorage.setItem(RELOAD_GUARD_KEY, liveVersion);
+
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('v', liveVersion);
+                    window.location.replace(url.toString());
+                })
+                .catch(() => {
+                    // Keep current cached version token on temporary network failures.
+                });
+        })();
+    </script>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OVERSEER // SYSTEM</title>
+    
+    <script>
+        document.write('<link rel="stylesheet" href="' + window.getVersionedAssetUrl('style.css') + '">');
+    </script>
+</head>
+<body>
+    
+<div id="loading-screen">
+    <div class="scanline-bar"></div>
+    <div class="monitor-frame">
+        <div class="terminal-text">
+            <p>&gt; The name of your OVERSEER today is: Giorgi</p>
+            <p>&gt; Thoughtcrimes commited today: 0</p>
+        </div>
+        <div class="center-content">
+            <div class="logo-wrapper image-mode">
+                <div class="styled-logo-image" style="-webkit-mask-image: url('images/my_logo.png'); mask-image: url('images/my_logo.png');"></div>
+            </div>
+            <div class="neon-divider"></div>
+            <div class="progress-container">
+                <p id="loading-text">Syncing Archives..</p>
+                <div class="progress-box">
+                    <div id="progress-bar" class="progress-fill" style="width: 35%;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="bottom-footer">
+            <p class="tagline">'Innovate, Don't Be Evil'</p>
+        </div>
+    </div>
+</div>
+
+<div id="tape-hover-ui">
+    <div class="hud-line">
+        <span class="blink-block">■</span> <span id="hover-title">PROJECT TITLE</span>
+    </div>
+    <div class="hud-line play-line">
+        ▶ <span id="hover-category">CATEGORY</span>
+    </div>
+    <div class="hud-line play-line hover-desc" id="hover-desc">//</div>
+</div>
+
+<canvas id="sequence-canvas"></canvas>
+
+<canvas id="bg-canvas"></canvas>
+
+<div id="scroll-track"></div>
+
+<div id="hotspot-container">
+    <div class="tv-hotspot" id="hotspot-menu" title="Menu">
+        <div class="tv-glow-box"></div>
+    </div>
+    <div class="tv-hotspot" id="hotspot-about" title="About">
+        <div class="tv-glow-box"></div>
+    </div>
+    <div class="tv-hotspot" id="hotspot-projects" title="Projects">
+        <div class="tv-glow-box"></div>
+    </div>
+    <div class="tv-hotspot" id="hotspot-contact" title="Net.Comm">
+        <div class="tv-glow-box"></div>
+    </div>
+</div>
+
+<script>
+    document.write('<script src="' + window.getVersionedAssetUrl('navbar.js') + '"><\\/script>');
+    document.write('<script type="module" src="' + window.getVersionedAssetUrl('script.js') + '"><\\/script>');
+</script>
+</body>
+</html>
