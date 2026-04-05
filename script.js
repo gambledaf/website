@@ -9,17 +9,18 @@ import { projectData } from './js/files.js';
 
 // --- 1. SHARED HELPERS & STATE ---
 function getVisibleConfig() {
-    const cssWidth = window.innerWidth;
-    const cssHeight = Math.max(window.innerHeight, 1);
-    const aspect = cssWidth / cssHeight;
-    const pixelRatio = Math.max(window.devicePixelRatio || 1, 1);
-    const scaledWidth = cssWidth * Math.min(pixelRatio, 1.5);
-    const useScaledDesktopWidth = aspect >= 1.6 && cssHeight >= 700;
-    const widthForCount = useScaledDesktopWidth ? scaledWidth : cssWidth;
-
-    let base = Math.floor(widthForCount / 240);
-    let count = (base % 2 === 0) ? base + 1 : base;
-    count = Math.max(5, Math.min(count, 9));
+    const aspect = window.innerWidth / window.innerHeight;
+    
+    let count = 9; // Always default to 9 for widescreens
+    
+    if (aspect < 0.8) {
+        // Tall, narrow screens (Mobile phones in portrait mode)
+        count = 5; 
+    } else if (aspect < 1.4) {
+        // Square-ish screens (Tablets, or slightly squished browser windows)
+        count = 7; 
+    }
+    
     return { count, radius: (count - 1) / 2 };
 }
 
