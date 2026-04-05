@@ -4,7 +4,8 @@
   "description": "3D Portfolio Website",
   "main": "script.js",
   "scripts": {
-    "predeploy": "git add . && git commit -m 'Auto-deploy update'",
+    "bump:version": "node scripts/bump-version.mjs",
+    "predeploy": "npm run bump:version",
     "deploy": "gh-pages -d ."
   },
   "repository": {

@@ -2,35 +2,72 @@
 <html lang="en">
 <head>
     <script>
-        // 1. We force the browser to check the LIVE server, ignoring the cache
-        fetch('version.json', { cache: 'no-store' })
-            .then(response => response.json())
-            .then(data => {
-                // 2. We check what version the user currently has saved
-                const localVersion = localStorage.getItem('portfolio_version');
-                const liveVersion = data.version;
+        (() => {
+            const VERSION_KEY = 'portfolio_version';
+            const RELOAD_GUARD_KEY = 'portfolio_reload_guard';
 
-                // 3. If they don't have a version yet, save it (first time visitor)
-                if (!localVersion) {
-                    localStorage.setItem('portfolio_version', liveVersion);
-                } 
-                // 4. If their saved version doesn't match your live version, FORCE REFRESH!
-                else if (localVersion !== liveVersion) {
-                    console.log("New version detected! Updating...");
-                    localStorage.setItem('portfolio_version', liveVersion);
-                    
-                    // The 'true' completely nukes the cache and reloads fresh
-                    window.location.reload(true); 
-                }
+            const initialVersion = localStorage.getItem(VERSION_KEY) || '';
+            window.__portfolioVersion = initialVersion;
+            window.getVersionedAssetUrl = (path) => {
+                const version = window.__portfolioVersion || localStorage.getItem(VERSION_KEY) || '';
+                if (!version) return path;
+                const sep = path.includes('?') ? '&' : '?';
+                return `${path}${sep}v=${encodeURIComponent(version)}`;
+            };
+
+            fetch(`version.json?ts=${Date.now()}`, {
+                cache: 'no-store',
+                headers: { 'Cache-Control': 'no-cache' }
             })
-            .catch(err => console.log("Version check failed, continuing normally."));
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`Version fetch failed: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then((data) => {
+                    const liveVersion = (typeof data?.version === 'string') ? data.version.trim() : '';
+                    if (!liveVersion) return;
+
+                    const localVersion = localStorage.getItem(VERSION_KEY);
+
+                    if (!localVersion) {
+                        localStorage.setItem(VERSION_KEY, liveVersion);
+                        window.__portfolioVersion = liveVersion;
+                        return;
+                    }
+
+                    if (localVersion === liveVersion) {
+                        window.__portfolioVersion = liveVersion;
+                        if (sessionStorage.getItem(RELOAD_GUARD_KEY) === liveVersion) {
+                            sessionStorage.removeItem(RELOAD_GUARD_KEY);
+                        }
+                        return;
+                    }
+
+                    localStorage.setItem(VERSION_KEY, liveVersion);
+                    window.__portfolioVersion = liveVersion;
+
+                    if (sessionStorage.getItem(RELOAD_GUARD_KEY) === liveVersion) return;
+                    sessionStorage.setItem(RELOAD_GUARD_KEY, liveVersion);
+
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('v', liveVersion);
+                    window.location.replace(url.toString());
+                })
+                .catch(() => {
+                    // Keep current cached version token on temporary network failures.
+                });
+        })();
     </script>
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OVERSEER // SYSTEM</title>
     
-    <link rel="stylesheet" href="style.css?v=1.0">
+    <script>
+        document.write('<link rel="stylesheet" href="' + window.getVersionedAssetUrl('style.css') + '">');
+    </script>
 </head>
 <body>
     
@@ -90,7 +127,9 @@
     </div>
 </div>
 
-<script src="navbar.js"></script>
-<script type="module" src="script.js"></script>
+<script>
+    document.write('<script src="' + window.getVersionedAssetUrl('navbar.js') + '"><\\/script>');
+    document.write('<script type="module" src="' + window.getVersionedAssetUrl('script.js') + '"><\\/script>');
+</script>
 </body>
 </html>

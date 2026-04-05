@@ -1,15 +1,75 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script>
+        (() => {
+            const VERSION_KEY = 'portfolio_version';
+            const RELOAD_GUARD_KEY = 'portfolio_reload_guard';
+
+            const initialVersion = localStorage.getItem(VERSION_KEY) || '';
+            window.__portfolioVersion = initialVersion;
+            window.getVersionedAssetUrl = (path) => {
+                const version = window.__portfolioVersion || localStorage.getItem(VERSION_KEY) || '';
+                if (!version) return path;
+                const sep = path.includes('?') ? '&' : '?';
+                return `${path}${sep}v=${encodeURIComponent(version)}`;
+            };
+
+            fetch(`../version.json?ts=${Date.now()}`, {
+                cache: 'no-store',
+                headers: { 'Cache-Control': 'no-cache' }
+            })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`Version fetch failed: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then((data) => {
+                    const liveVersion = (typeof data?.version === 'string') ? data.version.trim() : '';
+                    if (!liveVersion) return;
+
+                    const localVersion = localStorage.getItem(VERSION_KEY);
+
+                    if (!localVersion) {
+                        localStorage.setItem(VERSION_KEY, liveVersion);
+                        window.__portfolioVersion = liveVersion;
+                        return;
+                    }
+
+                    if (localVersion === liveVersion) {
+                        window.__portfolioVersion = liveVersion;
+                        if (sessionStorage.getItem(RELOAD_GUARD_KEY) === liveVersion) {
+                            sessionStorage.removeItem(RELOAD_GUARD_KEY);
+                        }
+                        return;
+                    }
+
+                    localStorage.setItem(VERSION_KEY, liveVersion);
+                    window.__portfolioVersion = liveVersion;
+
+                    if (sessionStorage.getItem(RELOAD_GUARD_KEY) === liveVersion) return;
+                    sessionStorage.setItem(RELOAD_GUARD_KEY, liveVersion);
+
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('v', liveVersion);
+                    window.location.replace(url.toString());
+                })
+                .catch(() => {
+                    // Keep current cached version token on temporary network failures.
+                });
+        })();
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ARCHIVE // DESIGN_01</title>
     
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     
-    <link rel="stylesheet" href="../style.css"> 
-    
-    <link rel="stylesheet" href="../project.css"> 
+    <script>
+        document.write('<link rel="stylesheet" href="' + window.getVersionedAssetUrl('../style.css') + '">');
+        document.write('<link rel="stylesheet" href="' + window.getVersionedAssetUrl('../project.css') + '">');
+    </script>
 </head>
 <body>
 
@@ -182,7 +242,9 @@
         <img id="lightbox-img" src="" alt="Full Screen">
     </div>
 
-    <script src="../navbar.js"></script>
-    <script src="../js/project.js"></script> 
+    <script>
+        document.write('<script src="' + window.getVersionedAssetUrl('../navbar.js') + '"><\\/script>');
+        document.write('<script src="' + window.getVersionedAssetUrl('../js/project.js') + '"><\\/script>');
+    </script>
 </body>
 </html>
