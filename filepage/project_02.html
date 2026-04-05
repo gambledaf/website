@@ -5,6 +5,17 @@
         (() => {
             const VERSION_KEY = 'portfolio_version';
             const RELOAD_GUARD_KEY = 'portfolio_reload_guard';
+            const stripVersionParam = () => {
+                try {
+                    const url = new URL(window.location.href);
+                    if (!url.searchParams.has('v')) return;
+                    url.searchParams.delete('v');
+                    const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+                    window.history.replaceState({}, document.title, nextUrl);
+                } catch {
+                    // Ignore URL rewrite issues.
+                }
+            };
 
             const initialVersion = localStorage.getItem(VERSION_KEY) || '';
             window.__portfolioVersion = initialVersion;
@@ -34,6 +45,7 @@
                     if (!localVersion) {
                         localStorage.setItem(VERSION_KEY, liveVersion);
                         window.__portfolioVersion = liveVersion;
+                        stripVersionParam();
                         return;
                     }
 
@@ -42,16 +54,19 @@
                         if (sessionStorage.getItem(RELOAD_GUARD_KEY) === liveVersion) {
                             sessionStorage.removeItem(RELOAD_GUARD_KEY);
                         }
+                        stripVersionParam();
                         return;
                     }
 
                     localStorage.setItem(VERSION_KEY, liveVersion);
                     window.__portfolioVersion = liveVersion;
 
-                    if (sessionStorage.getItem(RELOAD_GUARD_KEY) === liveVersion) return;
-                    sessionStorage.setItem(RELOAD_GUARD_KEY, liveVersion);
-
                     const url = new URL(window.location.href);
+                    if (sessionStorage.getItem(RELOAD_GUARD_KEY) === liveVersion || url.searchParams.get('v') === liveVersion) {
+                        stripVersionParam();
+                        return;
+                    }
+                    sessionStorage.setItem(RELOAD_GUARD_KEY, liveVersion);
                     url.searchParams.set('v', liveVersion);
                     window.location.replace(url.toString());
                 })

@@ -26,6 +26,17 @@
             const writeLocalVersion = (value) => writeStorage(window.localStorage, VERSION_KEY, value);
             const readReloadGuard = () => readStorage(window.sessionStorage, RELOAD_GUARD_KEY) || '';
             const writeReloadGuard = (value) => writeStorage(window.sessionStorage, RELOAD_GUARD_KEY, value);
+            const stripVersionParam = () => {
+                try {
+                    const url = new URL(window.location.href);
+                    if (!url.searchParams.has('v')) return;
+                    url.searchParams.delete('v');
+                    const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+                    window.history.replaceState({}, document.title, nextUrl);
+                } catch {
+                    // Ignore URL rewrite issues.
+                }
+            };
             const clearReloadGuard = () => {
                 try {
                     window.sessionStorage.removeItem(RELOAD_GUARD_KEY);
@@ -62,6 +73,7 @@
                     if (!localVersion) {
                         writeLocalVersion(liveVersion);
                         window.__portfolioVersion = liveVersion;
+                        stripVersionParam();
                         return;
                     }
 
@@ -70,6 +82,7 @@
                         if (readReloadGuard() === liveVersion) {
                             clearReloadGuard();
                         }
+                        stripVersionParam();
                         return;
                     }
 
@@ -77,8 +90,10 @@
                     window.__portfolioVersion = liveVersion;
 
                     const url = new URL(window.location.href);
-                    if (readReloadGuard() === liveVersion) return;
-                    if (url.searchParams.get('v') === liveVersion) return;
+                    if (readReloadGuard() === liveVersion || url.searchParams.get('v') === liveVersion) {
+                        stripVersionParam();
+                        return;
+                    }
                     writeReloadGuard(liveVersion);
                     url.searchParams.set('v', liveVersion);
                     window.location.replace(url.toString());
