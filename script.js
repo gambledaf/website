@@ -9,7 +9,15 @@ import { projectData } from './js/files.js';
 
 // --- 1. SHARED HELPERS & STATE ---
 function getVisibleConfig() {
-    let base = Math.floor(window.innerWidth / 240);
+    const cssWidth = window.innerWidth;
+    const cssHeight = Math.max(window.innerHeight, 1);
+    const aspect = cssWidth / cssHeight;
+    const pixelRatio = Math.max(window.devicePixelRatio || 1, 1);
+    const scaledWidth = cssWidth * Math.min(pixelRatio, 1.5);
+    const useScaledDesktopWidth = aspect >= 1.6 && cssHeight >= 700;
+    const widthForCount = useScaledDesktopWidth ? scaledWidth : cssWidth;
+
+    let base = Math.floor(widthForCount / 240);
     let count = (base % 2 === 0) ? base + 1 : base;
     count = Math.max(5, Math.min(count, 9));
     return { count, radius: (count - 1) / 2 };
@@ -870,22 +878,44 @@ window.addEventListener("mousemove", e => {
 });
 
 let scrollCooldown = false;
-const SCROLL_DELAY = 50;
+const SCROLL_DELAY = 70;
+const ZOOM_SCROLL_READY = 0.92;
+const ZOOM_OUT_INTENT_THRESHOLD = 1.4;
+let zoomOutIntent = 0;
 
 function applyWheelNavigation(deltaY) {
     const { radius } = cachedConfig;
+    const zoomSettledIn = state.zoom >= ZOOM_SCROLL_READY;
+    const atFirstTape = state.targetScroll <= radius + 0.001;
 
     if (deltaY > 5) {
+        // Don't advance tape index until the camera has mostly finished zooming in.
+        zoomOutIntent = 0;
         if (state.targetZoom < 1) {
             state.targetZoom = 1;
+        } else if (!zoomSettledIn) {
+            return;
         } else if (state.targetScroll < numTapes - 1 - radius) {
             state.targetScroll++;
         }
     } else if (deltaY < -5) {
+        if (!zoomSettledIn) {
+            state.targetZoom = 0;
+            zoomOutIntent = 0;
+            return;
+        }
+
         if (state.targetScroll > radius) {
             state.targetScroll--;
+            zoomOutIntent = 0;
         } else {
-            state.targetZoom = 0;
+            // Require a deliberate upward scroll gesture before leaving the first tape.
+            const intentGain = Math.min(Math.abs(deltaY) / 24, 1);
+            zoomOutIntent = atFirstTape ? (zoomOutIntent + intentGain) : 0;
+            if (zoomOutIntent >= ZOOM_OUT_INTENT_THRESHOLD) {
+                state.targetZoom = 0;
+                zoomOutIntent = 0;
+            }
         }
     }
 }
