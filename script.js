@@ -724,10 +724,15 @@ function handleFinalLoadState() {
 
     if (returnIndex !== null) {
         localStorage.removeItem('returnTapeIndex'); 
-        const tapeId = parseInt(returnIndex);
-        state.currentScroll = tapeId;
-        state.targetScroll = tapeId;
+        const parsedTapeId = Number.parseInt(returnIndex, 10);
+        const tapeId = Number.isFinite(parsedTapeId)
+            ? THREE.MathUtils.clamp(parsedTapeId, 0, Math.max(0, numTapes - 1))
+            : 0;
         cachedConfig = getVisibleConfig();
+
+        const restoredScroll = clampTapeTargetScroll(tapeId);
+        state.currentScroll = restoredScroll;
+        state.targetScroll = restoredScroll;
 
         state.zoom = 1;
         state.targetZoom = 1;
@@ -902,6 +907,7 @@ window.addEventListener("mousemove", e => {
 let scrollCooldown = false;
 const SCROLL_DELAY = 70;
 const ZOOM_SCROLL_READY = 0.92;
+const ZOOM_IN_SCROLL_LOCK_MS = 360;
 const ZOOM_OUT_INTENT_THRESHOLD = 1.4;
 const DRAG_ACTIVE_ZOOM = 0.85;
 const DRAG_START_THRESHOLD_PX = 6;
@@ -910,6 +916,7 @@ const DRAG_CLICK_SUPPRESS_MS = 220;
 const DRAG_HOVER_SUPPRESS_MS = 180;
 const DRAG_HOVER_REARM_DISTANCE_PX = 10;
 let zoomOutIntent = 0;
+let zoomInScrollUnlockAt = 0;
 
 const dragState = {
     active: false,
@@ -1018,6 +1025,7 @@ window.addEventListener('pointercancel', onTapeDragEnd);
 
 function applyWheelNavigation(deltaY) {
     const { radius } = cachedConfig;
+    const now = performance.now();
     const zoomSettledIn = state.zoom >= ZOOM_SCROLL_READY;
     const atFirstTape = state.targetScroll <= radius + 0.001;
 
@@ -1026,12 +1034,17 @@ function applyWheelNavigation(deltaY) {
         zoomOutIntent = 0;
         if (state.targetZoom < 1) {
             state.targetZoom = 1;
+            zoomInScrollUnlockAt = now + ZOOM_IN_SCROLL_LOCK_MS;
+            return;
+        } else if (now < zoomInScrollUnlockAt) {
+            return;
         } else if (!zoomSettledIn) {
             return;
         } else if (state.targetScroll < numTapes - 1 - radius) {
             state.targetScroll++;
         }
     } else if (deltaY < -5) {
+        zoomInScrollUnlockAt = 0;
         if (!zoomSettledIn) {
             state.targetZoom = 0;
             zoomOutIntent = 0;
