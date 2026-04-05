@@ -1,13 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script>
+        // 1. We force the browser to check the LIVE server, ignoring the cache
+        fetch('version.json', { cache: 'no-store' })
+            .then(response => response.json())
+            .then(data => {
+                // 2. We check what version the user currently has saved
+                const localVersion = localStorage.getItem('portfolio_version');
+                const liveVersion = data.version;
+
+                // 3. If they don't have a version yet, save it (first time visitor)
+                if (!localVersion) {
+                    localStorage.setItem('portfolio_version', liveVersion);
+                } 
+                // 4. If their saved version doesn't match your live version, FORCE REFRESH!
+                else if (localVersion !== liveVersion) {
+                    console.log("New version detected! Updating...");
+                    localStorage.setItem('portfolio_version', liveVersion);
+                    
+                    // The 'true' completely nukes the cache and reloads fresh
+                    window.location.reload(true); 
+                }
+            })
+            .catch(err => console.log("Version check failed, continuing normally."));
+    </script>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OVERSEER // SYSTEM</title>
-    <link rel="stylesheet" href="style.css">
+    
+    <link rel="stylesheet" href="style.css?v=1.0">
 </head>
 <body>
-
+    
 <div id="loading-screen">
     <div class="scanline-bar"></div>
     <div class="monitor-frame">

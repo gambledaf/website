@@ -876,13 +876,130 @@ function openProjectPage(data) {
 window.addEventListener("mousemove", e => {
     mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+    if (dragState.awaitingHoverRearm) {
+        if (Math.abs(e.clientX - dragState.releaseX) >= DRAG_HOVER_REARM_DISTANCE_PX) {
+            dragState.awaitingHoverRearm = false;
+        }
+    }
 });
 
 let scrollCooldown = false;
 const SCROLL_DELAY = 70;
 const ZOOM_SCROLL_READY = 0.92;
 const ZOOM_OUT_INTENT_THRESHOLD = 1.4;
+const DRAG_ACTIVE_ZOOM = 0.85;
+const DRAG_START_THRESHOLD_PX = 6;
+
+const DRAG_CLICK_SUPPRESS_MS = 220;
+const DRAG_HOVER_SUPPRESS_MS = 180;
+const DRAG_HOVER_REARM_DISTANCE_PX = 10;
 let zoomOutIntent = 0;
+
+const dragState = {
+    active: false,
+    moved: false,
+    startX: 0,
+    lastX: 0,
+    suppressClickUntil: 0,
+    hoverSuppressUntil: 0,
+    awaitingHoverRearm: false,
+    releaseX: 0,
+    pointerId: null
+};
+
+function clampTapeTargetScroll(value) {
+    const { radius } = cachedConfig;
+    return THREE.MathUtils.clamp(value, radius, numTapes - 1 - radius);
+}
+
+function canStartTapeDrag() {
+    if (state.isLocked) return false;
+    if (activeSequenceKey !== 'default') return false;
+    if (!defaultPowerOnPlayed) return false;
+    return state.zoom >= DRAG_ACTIVE_ZOOM || state.targetZoom >= DRAG_ACTIVE_ZOOM;
+}
+
+function onTapeDragStart(e) {
+    if (e.button !== 0) return;
+    if (!canStartTapeDrag()) return;
+
+    dragState.active = true;
+    dragState.moved = false;
+    dragState.startX = e.clientX;
+    dragState.lastX = e.clientX;
+    dragState.pointerId = e.pointerId;
+    dragState.hoverSuppressUntil = performance.now() + DRAG_HOVER_SUPPRESS_MS;
+    dragState.awaitingHoverRearm = false;
+    zoomOutIntent = 0;
+
+    if (renderer?.domElement?.setPointerCapture) {
+        try {
+            renderer.domElement.setPointerCapture(e.pointerId);
+        } catch (_) {
+            // Ignore capture errors from unsupported pointer states.
+        }
+    }
+}
+
+function onTapeDragMove(e) {
+    if (!dragState.active) return;
+
+    const distanceFromStart = e.clientX - dragState.startX;
+    if (!dragState.moved && Math.abs(distanceFromStart) < DRAG_START_THRESHOLD_PX) {
+        dragState.lastX = e.clientX;
+        return;
+    }
+    dragState.moved = true;
+    dragState.hoverSuppressUntil = performance.now() + DRAG_HOVER_SUPPRESS_MS;
+
+    const deltaX = e.clientX - dragState.lastX;
+    dragState.lastX = e.clientX;
+    if (deltaX === 0) return;
+
+    state.targetZoom = 1;
+
+    // The grip strength (6.0 usually feels great here)
+    const dynamicScrollFactor = 6.0 / window.innerWidth; 
+    
+    // We update where the tape SHOULD be...
+    state.targetScroll = clampTapeTargetScroll(state.targetScroll - (deltaX * dynamicScrollFactor));
+    
+    // ...BUT WE DO NOT FORCE IT INSTANTLY ANYMORE!
+    // We let your animate() loop smoothly slide 'currentScroll' to 'targetScroll'
+    
+    zoomOutIntent = 0;
+}
+
+function onTapeDragEnd(e) {
+    if (!dragState.active) return;
+
+    if (dragState.moved) {
+        dragState.suppressClickUntil = performance.now() + DRAG_CLICK_SUPPRESS_MS;
+        dragState.awaitingHoverRearm = true;
+        dragState.releaseX = typeof e?.clientX === 'number' ? e.clientX : dragState.lastX;
+    } else {
+        dragState.awaitingHoverRearm = false;
+    }
+    dragState.hoverSuppressUntil = performance.now() + DRAG_HOVER_SUPPRESS_MS;
+
+    if (renderer?.domElement?.releasePointerCapture && dragState.pointerId !== null) {
+        try {
+            renderer.domElement.releasePointerCapture(dragState.pointerId);
+        } catch (_) {
+            // Ignore capture release errors from unsupported pointer states.
+        }
+    }
+
+    dragState.active = false;
+    dragState.moved = false;
+    dragState.pointerId = null;
+}
+
+renderer.domElement.addEventListener('pointerdown', onTapeDragStart);
+window.addEventListener('pointermove', onTapeDragMove, { passive: true });
+window.addEventListener('pointerup', onTapeDragEnd);
+window.addEventListener('pointercancel', onTapeDragEnd);
 
 function applyWheelNavigation(deltaY) {
     const { radius } = cachedConfig;
@@ -971,8 +1088,7 @@ window.addEventListener("resize", () => {
     blendCanvas.height = window.innerHeight;
 
     cachedConfig = getVisibleConfig();
-    const { radius } = cachedConfig;
-    state.targetScroll = THREE.MathUtils.clamp(state.targetScroll, radius, numTapes - 1 - radius);
+    state.targetScroll = clampTapeTargetScroll(state.targetScroll);
     outlinePass.resolution.set(
         window.innerWidth * perfProfile.outlineScale,
         window.innerHeight * perfProfile.outlineScale
@@ -980,6 +1096,9 @@ window.addEventListener("resize", () => {
 });
 
 window.addEventListener('click', () => {
+    if (dragState.awaitingHoverRearm) return;
+    if (performance.now() < dragState.suppressClickUntil) return;
+
     if (state.zoom > 0.9 && state.activeTape && !state.isLocked) {
         state.isLocked = true;
         state.scrollSpeed = 0.03;
@@ -1034,6 +1153,7 @@ document.getElementById('hotspot-contact')?.addEventListener('click', () => hand
 function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
+    const hoverSuppressed = dragState.active || dragState.awaitingHoverRearm || performance.now() < dragState.hoverSuppressUntil;
 
     // 1. SCROLL WHEEL OVERRIDE
     // If the mouse wheel pushes us towards the tapes (zoom > 0.5), force the default sequence.
@@ -1080,7 +1200,7 @@ function animate() {
 
         tape.position.x = (i - state.currentScroll) * tapeSpacing;
 
-        if (state.zoom > 0.9) {
+        if (state.zoom > 0.9 && !hoverSuppressed) {
             tape.getWorldPosition(tempVec);
             tempVec.project(camera);
 
@@ -1095,7 +1215,7 @@ function animate() {
     });
 
     let hoveredTapeFromRay = null;
-    if (state.zoom > 0.9) {
+    if (state.zoom > 0.9 && !hoverSuppressed) {
         raycaster.setFromCamera(mouse, camera);
         const hits = raycaster.intersectObjects(visibleTapes, true);
         if (hits.length > 0) {
@@ -1103,7 +1223,7 @@ function animate() {
         }
     }
 
-    state.activeTape = hoveredTapeFromRay || (state.zoom > 0.9 ? currentFrameActiveTape : null);
+    state.activeTape = hoverSuppressed ? null : (hoveredTapeFromRay || (state.zoom > 0.9 ? currentFrameActiveTape : null));
     state.minDist = currentFrameMinDist;
 
     const tapeToOutline = state.selectedTape || state.activeTape;
@@ -1151,6 +1271,23 @@ function animate() {
         });
     });
 
+    const canTiltActiveTape = !state.isLocked && state.zoom > 0.9 && !hoverSuppressed;
+
+    tapes.forEach((tape) => {
+        if (!tape.visible) return;
+
+        // Keep clicked/selected tape animation untouched.
+        if (state.selectedTape === tape) return;
+
+        const isHoveredTape = canTiltActiveTape && tape === state.activeTape;
+        const targetRotX = isHoveredTape ? -mouse.y * 0.15 : 0;
+        const targetRotY = isHoveredTape ? -mouse.x * 0.20 : 0;
+
+        tape.rotation.x = THREE.MathUtils.lerp(tape.rotation.x, targetRotX, 0.1);
+        tape.rotation.y = THREE.MathUtils.lerp(tape.rotation.y, targetRotY, 0.1);
+    });
+    
+    
     // Hover Animation Triggers
     if (!state.isLocked && state.activeTape !== state.previousTape) {
         const hoverUI = document.getElementById('tape-hover-ui');
@@ -1172,6 +1309,8 @@ function animate() {
         }
         state.previousTape = state.activeTape;
     }
+
+    
 
     // 3. CAMERA
     const targetX = THREE.MathUtils.lerp(POS_START.x, POS_END.x, state.zoom);
@@ -1273,7 +1412,9 @@ function animate() {
     // 5. CURSOR
     if (!state.isLocked) {
         let cursorStyle = "default";
-        if (state.zoom > 0.9 && state.activeTape) {
+        if (dragState.active) {
+            cursorStyle = "grabbing";
+        } else if (state.zoom > 0.9 && state.activeTape) {
             cursorStyle = "pointer";
         }
         document.body.style.cursor = cursorStyle;
