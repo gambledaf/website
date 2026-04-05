@@ -4,12 +4,33 @@
     <script>
         (() => {
             const VERSION_KEY = 'portfolio_version';
-            const RELOAD_GUARD_KEY = 'portfolio_reload_guard';
+            const RELOAD_GUARD_KEY = 'portfolio_reload_once';
 
-            const initialVersion = localStorage.getItem(VERSION_KEY) || '';
+            const readStorage = (storage, key) => {
+                try {
+                    return storage.getItem(key);
+                } catch {
+                    return null;
+                }
+            };
+
+            const writeStorage = (storage, key, value) => {
+                try {
+                    storage.setItem(key, value);
+                } catch {
+                    // Ignore storage write failures in restricted/private environments.
+                }
+            };
+
+            const readLocalVersion = () => readStorage(window.localStorage, VERSION_KEY) || '';
+            const writeLocalVersion = (value) => writeStorage(window.localStorage, VERSION_KEY, value);
+            const hasReloadedThisTab = () => readStorage(window.sessionStorage, RELOAD_GUARD_KEY) === '1';
+            const markReloadedThisTab = () => writeStorage(window.sessionStorage, RELOAD_GUARD_KEY, '1');
+
+            const initialVersion = readLocalVersion();
             window.__portfolioVersion = initialVersion;
             window.getVersionedAssetUrl = (path) => {
-                const version = window.__portfolioVersion || localStorage.getItem(VERSION_KEY) || '';
+                const version = window.__portfolioVersion || readLocalVersion();
                 if (!version) return path;
                 const sep = path.includes('?') ? '&' : '?';
                 return `${path}${sep}v=${encodeURIComponent(version)}`;
@@ -29,29 +50,27 @@
                     const liveVersion = (typeof data?.version === 'string') ? data.version.trim() : '';
                     if (!liveVersion) return;
 
-                    const localVersion = localStorage.getItem(VERSION_KEY);
+                    const localVersion = readLocalVersion();
 
                     if (!localVersion) {
-                        localStorage.setItem(VERSION_KEY, liveVersion);
+                        writeLocalVersion(liveVersion);
                         window.__portfolioVersion = liveVersion;
                         return;
                     }
 
                     if (localVersion === liveVersion) {
                         window.__portfolioVersion = liveVersion;
-                        if (sessionStorage.getItem(RELOAD_GUARD_KEY) === liveVersion) {
-                            sessionStorage.removeItem(RELOAD_GUARD_KEY);
-                        }
                         return;
                     }
 
-                    localStorage.setItem(VERSION_KEY, liveVersion);
+                    writeLocalVersion(liveVersion);
                     window.__portfolioVersion = liveVersion;
 
-                    if (sessionStorage.getItem(RELOAD_GUARD_KEY) === liveVersion) return;
-                    sessionStorage.setItem(RELOAD_GUARD_KEY, liveVersion);
+                    if (hasReloadedThisTab()) return;
 
                     const url = new URL(window.location.href);
+                    if (url.searchParams.get('v') === liveVersion) return;
+                    markReloadedThisTab();
                     url.searchParams.set('v', liveVersion);
                     window.location.replace(url.toString());
                 })
@@ -66,7 +85,18 @@
     <title>OVERSEER // SYSTEM</title>
     
     <script>
-        document.write('<link rel="stylesheet" href="' + window.getVersionedAssetUrl('style.css') + '">');
+        (() => {
+            const getUrl = (path) => (
+                typeof window.getVersionedAssetUrl === 'function'
+                    ? window.getVersionedAssetUrl(path)
+                    : path
+            );
+
+            const styleLink = document.createElement('link');
+            styleLink.rel = 'stylesheet';
+            styleLink.href = getUrl('style.css');
+            document.head.appendChild(styleLink);
+        })();
     </script>
 </head>
 <body>
@@ -128,8 +158,23 @@
 </div>
 
 <script>
-    document.write('<script src="' + window.getVersionedAssetUrl('navbar.js') + '"><\\/script>');
-    document.write('<script type="module" src="' + window.getVersionedAssetUrl('script.js') + '"><\\/script>');
+    (() => {
+        const getUrl = (path) => (
+            typeof window.getVersionedAssetUrl === 'function'
+                ? window.getVersionedAssetUrl(path)
+                : path
+        );
+
+        const navbarScript = document.createElement('script');
+        navbarScript.src = getUrl('navbar.js');
+        navbarScript.async = false;
+        document.body.appendChild(navbarScript);
+
+        const appScript = document.createElement('script');
+        appScript.type = 'module';
+        appScript.src = getUrl('script.js');
+        document.body.appendChild(appScript);
+    })();
 </script>
 </body>
 </html>

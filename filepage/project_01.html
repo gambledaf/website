@@ -67,8 +67,23 @@
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     
     <script>
-        document.write('<link rel="stylesheet" href="' + window.getVersionedAssetUrl('../style.css') + '">');
-        document.write('<link rel="stylesheet" href="' + window.getVersionedAssetUrl('../project.css') + '">');
+        (() => {
+            const getUrl = (path) => (
+                typeof window.getVersionedAssetUrl === 'function'
+                    ? window.getVersionedAssetUrl(path)
+                    : path
+            );
+
+            const baseStyleLink = document.createElement('link');
+            baseStyleLink.rel = 'stylesheet';
+            baseStyleLink.href = getUrl('../style.css');
+            document.head.appendChild(baseStyleLink);
+
+            const pageStyleLink = document.createElement('link');
+            pageStyleLink.rel = 'stylesheet';
+            pageStyleLink.href = getUrl('../project.css');
+            document.head.appendChild(pageStyleLink);
+        })();
     </script>
 </head>
 <body>
@@ -243,8 +258,23 @@
     </div>
 
     <script>
-        document.write('<script src="' + window.getVersionedAssetUrl('../navbar.js') + '"><\\/script>');
-        document.write('<script src="' + window.getVersionedAssetUrl('../js/project.js') + '"><\\/script>');
+        (() => {
+            const getUrl = (path) => (
+                typeof window.getVersionedAssetUrl === 'function'
+                    ? window.getVersionedAssetUrl(path)
+                    : path
+            );
+
+            const navbarScript = document.createElement('script');
+            navbarScript.src = getUrl('../navbar.js');
+            navbarScript.async = false;
+            document.body.appendChild(navbarScript);
+
+            const projectScript = document.createElement('script');
+            projectScript.src = getUrl('../js/project.js');
+            projectScript.async = false;
+            document.body.appendChild(projectScript);
+        })();
     </script>
 </body>
 </html>

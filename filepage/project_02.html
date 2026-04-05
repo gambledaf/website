@@ -63,7 +63,18 @@
     <meta charset="UTF-8">
     <title>Project 02</title>
     <script>
-        document.write('<link rel="stylesheet" href="' + window.getVersionedAssetUrl('../style.css') + '">');
+        (() => {
+            const getUrl = (path) => (
+                typeof window.getVersionedAssetUrl === 'function'
+                    ? window.getVersionedAssetUrl(path)
+                    : path
+            );
+
+            const styleLink = document.createElement('link');
+            styleLink.rel = 'stylesheet';
+            styleLink.href = getUrl('../style.css');
+            document.head.appendChild(styleLink);
+        })();
     </script>
 </head>
 <body>
@@ -71,7 +82,18 @@
     <a href="../index.html" class="back-btn" id="eject-btn">■ EJECT & RETURN</a>
 
     <script>
-        document.write('<script src="' + window.getVersionedAssetUrl('../navbar.js') + '"><\\/script>');
+        (() => {
+            const getUrl = (path) => (
+                typeof window.getVersionedAssetUrl === 'function'
+                    ? window.getVersionedAssetUrl(path)
+                    : path
+            );
+
+            const navbarScript = document.createElement('script');
+            navbarScript.src = getUrl('../navbar.js');
+            navbarScript.async = false;
+            document.body.appendChild(navbarScript);
+        })();
     </script>
 
     <script>
