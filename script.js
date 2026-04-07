@@ -182,9 +182,19 @@ const SECTION_PLAYBACK = {
 const SEQUENCE_BLEND = {
     zoomStart: 0.72,
     zoomFull: 0.92,
-    radiusNdc: 0.18,
+    radiusNdc: 0.13,
     softness: 0.72,
     maxAlpha: 0.95
+};
+
+const SEQUENCE_MOUSE_TRAIL = {
+    maxPoints: 14,
+    lifetimeMs: 420,
+    minSampleDistance: 0.01,
+    minSampleIntervalMs: 14,
+    tailOpacity: 0.55,
+    tailRadiusStart: 0.9,
+    tailRadiusEnd: 0.7
 };
 
 const SEQUENCE_TIMELINE = {
@@ -232,6 +242,42 @@ let pendingScrollDelta = 0;
 let sectionPreloadQueued = false;
 const blendCanvas = document.createElement('canvas');
 const blendCtx = blendCanvas.getContext('2d');
+const blendMaskCanvas = document.createElement('canvas');
+const blendMaskCtx = blendMaskCanvas.getContext('2d');
+const sequenceMouseTrail = [];
+let hasSequenceMousePosition = false;
+let lastSequenceTrailSampleTime = 0;
+
+function updateSequenceMouseTrail(clientX, clientY) {
+    const now = performance.now();
+    const u = THREE.MathUtils.clamp(clientX / window.innerWidth, 0, 1);
+    const v = THREE.MathUtils.clamp(clientY / window.innerHeight, 0, 1);
+
+    hasSequenceMousePosition = true;
+
+    const last = sequenceMouseTrail[sequenceMouseTrail.length - 1];
+    const hasInterval = (now - lastSequenceTrailSampleTime) >= SEQUENCE_MOUSE_TRAIL.minSampleIntervalMs;
+    const hasDistance = !last || Math.hypot(u - last.u, v - last.v) >= SEQUENCE_MOUSE_TRAIL.minSampleDistance;
+
+    if (!last || hasInterval || hasDistance) {
+        sequenceMouseTrail.push({ u, v, t: now });
+        if (sequenceMouseTrail.length > SEQUENCE_MOUSE_TRAIL.maxPoints) {
+            sequenceMouseTrail.splice(0, sequenceMouseTrail.length - SEQUENCE_MOUSE_TRAIL.maxPoints);
+        }
+        lastSequenceTrailSampleTime = now;
+    } else {
+        last.u = u;
+        last.v = v;
+        last.t = now;
+    }
+}
+
+function pruneSequenceMouseTrail(now) {
+    const oldestAllowed = now - SEQUENCE_MOUSE_TRAIL.lifetimeMs;
+    while (sequenceMouseTrail.length > 0 && sequenceMouseTrail[0].t < oldestAllowed) {
+        sequenceMouseTrail.shift();
+    }
+}
 
 function activateSectionSequence(sequenceKey) {
     activeSequenceKey = sequenceKey;
@@ -495,6 +541,10 @@ function drawSequence(progress, forcedFrame = null) {
         blendCanvas.width = seqCanvas.width;
         blendCanvas.height = seqCanvas.height;
     }
+    if (blendMaskCanvas.width !== seqCanvas.width || blendMaskCanvas.height !== seqCanvas.height) {
+        blendMaskCanvas.width = seqCanvas.width;
+        blendMaskCanvas.height = seqCanvas.height;
+    }
     blendCtx.clearRect(0, 0, blendCanvas.width, blendCanvas.height);
     blendCtx.globalAlpha = 1;
     blendCtx.drawImage(img2Base, sx, sy, sw, sh, 0, 0, blendCanvas.width, blendCanvas.height);
@@ -509,13 +559,53 @@ function drawSequence(progress, forcedFrame = null) {
     const radiusPx = SEQUENCE_BLEND.radiusNdc * Math.min(blendCanvas.width, blendCanvas.height);
     const innerRadiusPx = radiusPx * (1 - THREE.MathUtils.clamp(SEQUENCE_BLEND.softness, 0.05, 0.95));
 
-    const gradient = blendCtx.createRadialGradient(mx, my, innerRadiusPx, mx, my, radiusPx);
-    gradient.addColorStop(0, `rgba(0,0,0,${blendAlpha * SEQUENCE_BLEND.maxAlpha})`);
-    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+    const now = performance.now();
+    pruneSequenceMouseTrail(now);
+
+    if (!blendMaskCtx) return;
+    blendMaskCtx.clearRect(0, 0, blendMaskCanvas.width, blendMaskCanvas.height);
+
+    const drawMaskSpot = (cx, cy, alphaScale, radiusScale) => {
+        const safeRadiusScale = Math.max(0.2, radiusScale);
+        const outerRadius = radiusPx * safeRadiusScale;
+        const innerRadius = innerRadiusPx * safeRadiusScale;
+        const alpha = THREE.MathUtils.clamp(blendAlpha * SEQUENCE_BLEND.maxAlpha * alphaScale, 0, 1);
+        if (alpha <= 0.001) return;
+
+        const gradient = blendMaskCtx.createRadialGradient(cx, cy, innerRadius, cx, cy, outerRadius);
+        gradient.addColorStop(0, `rgba(0,0,0,${alpha})`);
+        gradient.addColorStop(1, 'rgba(0,0,0,0)');
+        blendMaskCtx.fillStyle = gradient;
+        blendMaskCtx.fillRect(cx - outerRadius, cy - outerRadius, outerRadius * 2, outerRadius * 2);
+    };
+
+    if (hasSequenceMousePosition) {
+        drawMaskSpot(mx, my, 1, 1);
+    }
+
+    for (let i = sequenceMouseTrail.length - 1; i >= 0; i--) {
+        const sample = sequenceMouseTrail[i];
+        const age = now - sample.t;
+        const ageNorm = THREE.MathUtils.clamp(age / SEQUENCE_MOUSE_TRAIL.lifetimeMs, 0, 1);
+        if (ageNorm >= 1) continue;
+
+        const fade = 1 - ageNorm;
+        const sampleRadiusScale = THREE.MathUtils.lerp(
+            SEQUENCE_MOUSE_TRAIL.tailRadiusStart,
+            SEQUENCE_MOUSE_TRAIL.tailRadiusEnd,
+            fade
+        );
+        const sampleAlphaScale = SEQUENCE_MOUSE_TRAIL.tailOpacity * fade * fade;
+        drawMaskSpot(
+            sample.u * blendCanvas.width,
+            sample.v * blendCanvas.height,
+            sampleAlphaScale,
+            sampleRadiusScale
+        );
+    }
 
     blendCtx.globalCompositeOperation = 'destination-in';
-    blendCtx.fillStyle = gradient;
-    blendCtx.fillRect(0, 0, blendCanvas.width, blendCanvas.height);
+    blendCtx.drawImage(blendMaskCanvas, 0, 0, blendCanvas.width, blendCanvas.height);
     blendCtx.globalCompositeOperation = 'source-over';
 
     seqCtx.drawImage(blendCanvas, 0, 0, seqCanvas.width, seqCanvas.height);
@@ -528,6 +618,8 @@ if (seqCanvas) {
 }
 blendCanvas.width = window.innerWidth;
 blendCanvas.height = window.innerHeight;
+blendMaskCanvas.width = window.innerWidth;
+blendMaskCanvas.height = window.innerHeight;
 preloadSequenceByKey('default', true);
 
 // --- 3. GLOBAL SCENE ---
@@ -898,6 +990,7 @@ function openProjectPage(data) {
 window.addEventListener("mousemove", e => {
     mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    updateSequenceMouseTrail(e.clientX, e.clientY);
 
     if (dragState.awaitingHoverRearm) {
         if (Math.abs(e.clientX - dragState.releaseX) >= DRAG_HOVER_REARM_DISTANCE_PX) {
@@ -1227,6 +1320,8 @@ window.addEventListener("resize", () => {
     }
     blendCanvas.width = window.innerWidth;
     blendCanvas.height = window.innerHeight;
+    blendMaskCanvas.width = window.innerWidth;
+    blendMaskCanvas.height = window.innerHeight;
 
     cachedConfig = getVisibleConfig();
     state.targetScroll = clampTapeTargetScroll(state.targetScroll);
