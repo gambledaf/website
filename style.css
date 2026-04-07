@@ -313,6 +313,16 @@ body {
     height: 56.25vw; 
     min-height: 100vh;
     min-width: 177.77vh; 
+
+    /* Contact email hotspot calibration (percentage-based so it scales with the 16:9 container). */
+    --email-hotspot-left: 50%;
+    --email-hotspot-top: 44.5%;
+    --email-hotspot-width: 14%;
+    --email-hotspot-height: 5%;
+    --linkedin-hotspot-left: 50%;
+    --linkedin-hotspot-top: 53%;
+    --linkedin-hotspot-width: 14%;
+    --linkedin-hotspot-height: 5%;
     
     z-index: 40;
     pointer-events: none;
@@ -456,4 +466,85 @@ body {
     padding: 3px;
     margin: 0 auto; /* Forces strict horizontal centering */
     box-sizing: border-box;
+}
+#hotspot-email,
+#hotspot-linkedin {
+    position: absolute;
+    transform: translate(-50%, -150%);
+    z-index: 100;
+    cursor: pointer;
+    display: block;
+    background: transparent;
+    border: none;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease;
+}
+
+#hotspot-email {
+    width: var(--email-hotspot-width);
+    height: var(--email-hotspot-height);
+    top: var(--email-hotspot-top);
+    left: var(--email-hotspot-left);
+}
+
+#hotspot-linkedin {
+    width: var(--linkedin-hotspot-width);
+    height: var(--linkedin-hotspot-height);
+    top: var(--linkedin-hotspot-top);
+    left: var(--linkedin-hotspot-left);
+}
+
+#copyEmailBtn {
+    position: absolute;
+    top: calc(50% - 78px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 101;
+    min-width: 168px;
+    height: 44px;
+    border: 1px solid rgba(var(--crt-green-rgb), 0.75);
+    background: rgba(1, 6, 4, 0.86);
+    color: var(--crt-green);
+    font-family: 'VT323', monospace;
+    font-size: 1.35rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    display: none;
+    transition: opacity 0.22s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: inset 0 0 0 1px rgba(var(--crt-green-rgb), 0.2);
+}
+
+#copyEmailBtn:hover {
+    transform: translateX(-50%) scale(1.03);
+    box-shadow: 0 0 12px rgba(var(--crt-green-rgb), 0.5), inset 0 0 0 1px rgba(var(--crt-green-rgb), 0.35);
+}
+
+#copyFeedback {
+    position: absolute;
+    top: calc(50% - 114px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 101;
+    color: var(--crt-green);
+    font-family: 'VT323', monospace;
+    font-size: 1.15rem;
+    letter-spacing: 0.03em;
+    text-shadow: 0 0 10px rgba(var(--crt-green-rgb), 0.7);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+#copyFeedback.visible {
+    opacity: 1;
+}
+
+#hotspot-container.contact-active #hotspot-email,
+#hotspot-container.contact-active #hotspot-linkedin {
+    opacity: 1;
+    pointer-events: auto;
 }

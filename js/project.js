@@ -1,4 +1,4 @@
-document.addEventListener("DOMContentLoaded", () => {
+function initializeProjectPageInteractions() {
     const lightbox = document.getElementById("lightbox");
     const lightboxImg = document.getElementById("lightbox-img");
     const btnClose = document.getElementById("close-lightbox");
@@ -92,4 +92,10 @@ document.addEventListener("DOMContentLoaded", () => {
         window.addEventListener("resize", updateGalleryButtons);
         updateGalleryButtons();
     }
-});
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initializeProjectPageInteractions, { once: true });
+} else {
+    initializeProjectPageInteractions();
+}
