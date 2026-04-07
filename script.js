@@ -892,6 +892,8 @@ function openProjectPage(data) {
     }
 }
 
+
+
 // --- 7. EVENTS ---
 window.addEventListener("mousemove", e => {
     mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
@@ -903,6 +905,117 @@ window.addEventListener("mousemove", e => {
         }
     }
 });
+
+const copyBtn = document.getElementById('copyEmailBtn');
+const emailHotspot = document.getElementById('hotspot-email');
+const linkedinHotspot = document.getElementById('hotspot-linkedin');
+const feedbackMsg = document.getElementById('copyFeedback');
+let copyFeedbackTimeoutId = null;
+
+function showCopyFeedback(message) {
+    if (!feedbackMsg) return;
+
+    feedbackMsg.textContent = message;
+    feedbackMsg.classList.add('visible');
+
+    if (copyFeedbackTimeoutId) {
+        clearTimeout(copyFeedbackTimeoutId);
+    }
+
+    copyFeedbackTimeoutId = setTimeout(() => {
+        feedbackMsg.classList.remove('visible');
+        copyFeedbackTimeoutId = null;
+    }, 1800);
+}
+
+function fallbackCopyText(text) {
+    const helper = document.createElement('textarea');
+    helper.value = text;
+    helper.setAttribute('readonly', '');
+    helper.style.position = 'fixed';
+    helper.style.opacity = '0';
+    helper.style.pointerEvents = 'none';
+    helper.style.left = '-9999px';
+    document.body.appendChild(helper);
+
+    helper.select();
+    helper.setSelectionRange(0, helper.value.length);
+
+    let success = false;
+    try {
+        success = document.execCommand('copy');
+    } catch {
+        success = false;
+    }
+
+    helper.remove();
+    return success;
+}
+
+function getEmailToCopy() {
+    const fromButton = copyBtn?.getAttribute('data-email') || '';
+    if (fromButton) return fromButton;
+
+    const fromHotspotData = emailHotspot?.getAttribute('data-email') || '';
+    if (fromHotspotData) return fromHotspotData;
+
+    const href = emailHotspot?.getAttribute('href') || '';
+    if (href.toLowerCase().startsWith('mailto:')) {
+        return href.slice('mailto:'.length).trim();
+    }
+
+    return '';
+}
+
+async function handleCopyEmail(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    if (activeSequenceKey !== 'contact') return;
+
+    const emailToCopy = getEmailToCopy();
+    if (!emailToCopy) return;
+
+    let copied = false;
+
+    if (navigator.clipboard && window.isSecureContext) {
+        try {
+            await navigator.clipboard.writeText(emailToCopy);
+            copied = true;
+        } catch {
+            copied = false;
+        }
+    }
+
+    if (!copied) {
+        copied = fallbackCopyText(emailToCopy);
+    }
+
+    if (copied) {
+        showCopyFeedback('Email copied!');
+    } else {
+        showCopyFeedback('Copy failed');
+    }
+}
+
+if (copyBtn) {
+    copyBtn.addEventListener('click', handleCopyEmail);
+}
+
+if (emailHotspot) {
+    emailHotspot.addEventListener('click', handleCopyEmail);
+}
+
+if (linkedinHotspot) {
+    linkedinHotspot.addEventListener('click', (event) => {
+        if (activeSequenceKey !== 'contact') {
+            event.preventDefault();
+        }
+        event.stopPropagation();
+    });
+}
 
 let scrollCooldown = false;
 const SCROLL_DELAY = 70;
@@ -1206,6 +1319,17 @@ function animate() {
             hotspotContainer.classList.add('zoomed-in');
         } else {
             hotspotContainer.classList.remove('zoomed-in');
+        }
+
+        const isContactActive = activeSequenceKey === 'contact' && state.zoom < 0.15 && state.targetZoom < 0.1;
+        hotspotContainer.classList.toggle('contact-active', isContactActive);
+
+        if (!isContactActive && feedbackMsg?.classList.contains('visible')) {
+            feedbackMsg.classList.remove('visible');
+            if (copyFeedbackTimeoutId) {
+                clearTimeout(copyFeedbackTimeoutId);
+                copyFeedbackTimeoutId = null;
+            }
         }
     }
 
