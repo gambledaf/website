@@ -98,11 +98,11 @@ body {
     grid-auto-rows: auto;
     gap: 24px;
     padding: 20px;
-    overflow-y: auto;
-    height: 100%;
+    overflow: visible;
+    height: auto;
     width: 100%;
     max-width: 100%;
-    min-height: 0;
+    min-height: auto;
     margin: 0 auto;
     align-content: start;
     background-image:
@@ -111,8 +111,8 @@ body {
     background-size: 26px 26px;
     align-items: start;
     justify-content: center;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: auto;
+    overscroll-behavior: auto;
 }
 
 /* --- MEDIA MODULES (Base Styling) --- */
