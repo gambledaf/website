@@ -1,6 +1,7 @@
 // --- 1. DETERMINE CURRENT LOCATION ---
 const isMainPage = window.location.pathname.endsWith('index.html') || window.location.pathname === '/' || window.location.pathname.endsWith('/');
 const inSubfolder = window.location.pathname.includes('/filepage/');
+const canHoverUI = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 // If we are in the subfolder, we need to go UP one level ("../") to find images and the index.
 const basePath = inSubfolder ? '../' : '';
@@ -144,6 +145,12 @@ if ((inSubfolder || projectGridEl) && navbarEl && logoEl) {
     };
 
     const handleProjectScroll = () => {
+        if (!canHoverUI) {
+            navVisibilityState.scrollHidden = false;
+            applyNavbarVisibility();
+            return;
+        }
+
         const currentScroll = getCurrentScroll();
         const delta = currentScroll - lastScroll;
 
@@ -177,64 +184,66 @@ if ((inSubfolder || projectGridEl) && navbarEl && logoEl) {
         projectGridEl.addEventListener('scroll', handleProjectScroll, { passive: true });
     }
 
-    document.addEventListener('mousemove', (e) => {
-        const targetEl = e.target instanceof Element ? e.target : null;
-        const overNavbar = !!targetEl && (!!targetEl.closest('.retro-header') || !!targetEl.closest('.retro-logo'));
+    if (canHoverUI) {
+        document.addEventListener('mousemove', (e) => {
+            const targetEl = e.target instanceof Element ? e.target : null;
+            const overNavbar = !!targetEl && (!!targetEl.closest('.retro-header') || !!targetEl.closest('.retro-logo'));
 
-        if (overNavbar || e.clientY <= revealEnterY) {
+            if (overNavbar || e.clientY <= revealEnterY) {
+                if (hoverHideTimer) {
+                    clearTimeout(hoverHideTimer);
+                    hoverHideTimer = null;
+                }
+                setHoverReveal(true);
+                return;
+            }
+
+            if (navVisibilityState.hoverReveal && e.clientY >= revealExitY) {
+                if (hoverHideTimer) clearTimeout(hoverHideTimer);
+                hoverHideTimer = setTimeout(() => {
+                    setHoverReveal(false);
+                    hoverHideTimer = null;
+                }, 120);
+            }
+        });
+
+        navbarEl.addEventListener('mouseenter', () => {
             if (hoverHideTimer) {
                 clearTimeout(hoverHideTimer);
                 hoverHideTimer = null;
             }
             setHoverReveal(true);
-            return;
-        }
+        });
 
-        if (navVisibilityState.hoverReveal && e.clientY >= revealExitY) {
+        navbarEl.addEventListener('mouseleave', () => {
             if (hoverHideTimer) clearTimeout(hoverHideTimer);
             hoverHideTimer = setTimeout(() => {
                 setHoverReveal(false);
                 hoverHideTimer = null;
-            }, 120);
-        }
-    });
+            }, 140);
+        });
 
-    navbarEl.addEventListener('mouseenter', () => {
-        if (hoverHideTimer) {
-            clearTimeout(hoverHideTimer);
-            hoverHideTimer = null;
-        }
-        setHoverReveal(true);
-    });
+        logoEl.addEventListener('mouseenter', () => {
+            if (hoverHideTimer) {
+                clearTimeout(hoverHideTimer);
+                hoverHideTimer = null;
+            }
+            setHoverReveal(true);
+        });
 
-    navbarEl.addEventListener('mouseleave', () => {
-        if (hoverHideTimer) clearTimeout(hoverHideTimer);
-        hoverHideTimer = setTimeout(() => {
+        logoEl.addEventListener('mouseleave', () => {
+            if (hoverHideTimer) clearTimeout(hoverHideTimer);
+            hoverHideTimer = setTimeout(() => {
+                setHoverReveal(false);
+                hoverHideTimer = null;
+            }, 140);
+        });
+
+        document.addEventListener('mouseleave', () => {
+            if (hoverHideTimer) clearTimeout(hoverHideTimer);
             setHoverReveal(false);
-            hoverHideTimer = null;
-        }, 140);
-    });
-
-    logoEl.addEventListener('mouseenter', () => {
-        if (hoverHideTimer) {
-            clearTimeout(hoverHideTimer);
-            hoverHideTimer = null;
-        }
-        setHoverReveal(true);
-    });
-
-    logoEl.addEventListener('mouseleave', () => {
-        if (hoverHideTimer) clearTimeout(hoverHideTimer);
-        hoverHideTimer = setTimeout(() => {
-            setHoverReveal(false);
-            hoverHideTimer = null;
-        }, 140);
-    });
-
-    document.addEventListener('mouseleave', () => {
-        if (hoverHideTimer) clearTimeout(hoverHideTimer);
-        setHoverReveal(false);
-    });
+        });
+    }
 
     // Ensure initial state is correct after navigation/restore.
     handleProjectScroll();

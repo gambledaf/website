@@ -18,16 +18,20 @@ body {
     font-family: 'VT323', monospace;
     margin: 0; 
     /* The 100px top padding pushes the content down so your navbar fits perfectly */
-    padding: 100px 40px 40px 40px; 
+    padding: clamp(78px, 11vw, 100px) clamp(12px, 3.2vw, 40px) clamp(18px, 4vw, 40px) clamp(12px, 3.2vw, 40px);
+    padding-top: max(clamp(78px, 11vw, 100px), env(safe-area-inset-top));
+    padding-bottom: max(clamp(18px, 4vw, 40px), env(safe-area-inset-bottom));
     display: block; /* Removes the flexbox that was breaking things */
     text-shadow: 0 0 5px rgba(var(--term-light-rgb), 0.4); /* Subtle terminal glow */
+    min-height: 100dvh;
+    -webkit-text-size-adjust: 100%;
 }
 
 /* 2. FULLY STRETCH THE WINDOW (Fills your widescreen monitor) */
 .crt-window {
     width: 100%; /* Stretch fully from left to right */
     max-width: none; /* Kills the width limit so it fills large monitors */
-    min-height: calc(100vh - 140px); /* Stretches dynamically to the bottom of the screen */
+    min-height: calc(100dvh - 140px); /* Stretches dynamically to the bottom of the screen */
     
     background-color: rgba(var(--term-bg-rgb), 0.85);
     border: 2px solid var(--term-light);
@@ -107,6 +111,8 @@ body {
     background-size: 26px 26px;
     align-items: start;
     justify-content: center;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
 }
 
 /* --- MEDIA MODULES (Base Styling) --- */
@@ -273,6 +279,7 @@ body {
     cursor: pointer;
     box-shadow: inset 0 0 0 1px rgba(var(--term-light-rgb), 0.15), var(--line-glow-soft);
     transition: background-color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+    touch-action: manipulation;
 }
 
 .gallery-nav:hover:not(:disabled) {
@@ -330,6 +337,37 @@ body {
     }
 }
 
+@media (max-width: 560px) {
+    body {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+
+    .crt-window {
+        min-height: calc(100dvh - 100px);
+        border-width: 1px;
+    }
+
+    .window-header {
+        font-size: 1rem;
+        padding: 8px 10px;
+    }
+
+    .project-grid {
+        gap: 12px;
+        padding: 10px;
+    }
+
+    .gallery-item {
+        height: clamp(240px, 62vw, 420px);
+    }
+
+    .module-desc {
+        font-size: 1rem;
+        padding: 7px 10px;
+    }
+}
+
 .gallery-item img {
     width: 100%;
     height: 100%;
@@ -376,7 +414,19 @@ body {
 .video-frame {
     aspect-ratio: 16/9;
     max-width: 1200px;
+    width: 100%;
     margin: 0 auto;
+    position: relative;
+    overflow: hidden;
+}
+
+.video-frame > iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
 }
 .top-desc { 
     margin-bottom: 15px; border-left: none; 
@@ -392,6 +442,16 @@ body {
     .module-desc {
         min-height: 72px;
         font-size: 1.05rem;
+    }
+
+    .video-module {
+        margin: 24px auto 14px auto;
+        padding-top: 18px;
+    }
+
+    .video-frame {
+        max-width: 100%;
+        aspect-ratio: 16 / 9;
     }
 }
 
