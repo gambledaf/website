@@ -1,9 +1,5 @@
 import * as THREE from "https://esm.sh/three@0.129.0";
 import { GLTFLoader } from "https://esm.sh/three@0.129.0/examples/jsm/loaders/GLTFLoader.js";
-import { RenderPass } from "https://esm.sh/three@0.129.0/examples/jsm/postprocessing/RenderPass.js";
-import { EffectComposer } from "https://esm.sh/three@0.129.0/examples/jsm/postprocessing/EffectComposer.js";
-import { UnrealBloomPass } from "https://esm.sh/three@0.129.0/examples/jsm/postprocessing/UnrealBloomPass.js";
-import { OutlinePass } from "https://esm.sh/three@0.129.0/examples/jsm/postprocessing/OutlinePass.js";
 
 const moduleVersion = new URL(import.meta.url).searchParams.get('v') || '';
 const withVersion = (path) => {
@@ -55,6 +51,260 @@ const state = {
     scrollSpeed: 0.1,
     minDist: 999
 };
+
+let swooshSfx = null;
+let swooshPrimed = false;
+const SWOOSH_START_OFFSET_SEC = 0.1;
+let staticAmbienceSfx = null;
+let buzzLayerSfx = null;
+let staticAmbiencePrimed = false;
+let buzzRearmGestureListenerBound = false;
+const STATIC_PROJECTS_ZOOM_THRESHOLD = 0.45;
+const STATIC_BUZZ = {
+    baseVolume: 0.02,
+    maxVolumeBoost: 0.01,
+    baseRate: 0.98,
+    maxRateBoost: 0.12,
+    layerMaxVolume: 0.05,
+    layerBaseRate: 0.95,
+    layerRateBoost: 0.12,
+    inZoneFloorVolume: 0.006,
+    minSpeedPxPerMs: 0.35,
+    maxSpeedPxPerMs: 2.2,
+    decayPerSecond: 3.4,
+    motionIntensityGain: 0.55,
+    motionCurveExponent: 2.1,
+    sampleMinIntervalMs: 12
+};
+const STATIC_BUZZ_ZONE = {
+    xPct: 0.39,
+    yPct: 0.24,
+    widthPct: 0.22,
+    heightPct: 0.4
+};
+let staticBuzzIntensity = 0;
+let staticBuzzLastX = null;
+let staticBuzzLastY = null;
+let staticBuzzLastSampleTime = 0;
+let staticBuzzPointerInZone = false;
+
+function isMainPageBuzzState() {
+    return activeSequenceKey === 'default'
+        && state.targetZoom <= STATIC_PROJECTS_ZOOM_THRESHOLD;
+}
+
+function resetStaticBuzzTracking() {
+    staticBuzzIntensity = 0;
+    resetStaticBuzzPointerTracking();
+}
+
+function resetStaticBuzzPointerTracking() {
+    staticBuzzPointerInZone = false;
+    staticBuzzLastX = null;
+    staticBuzzLastY = null;
+    staticBuzzLastSampleTime = 0;
+}
+
+function getStaticBuzzZoneRect() {
+    const left = window.innerWidth * STATIC_BUZZ_ZONE.xPct;
+    const top = window.innerHeight * STATIC_BUZZ_ZONE.yPct;
+    const width = window.innerWidth * STATIC_BUZZ_ZONE.widthPct;
+    const height = window.innerHeight * STATIC_BUZZ_ZONE.heightPct;
+
+    return {
+        left,
+        top,
+        right: left + width,
+        bottom: top + height,
+        width,
+        height
+    };
+}
+
+function isInsideStaticBuzzZone(clientX, clientY) {
+    const zone = getStaticBuzzZoneRect();
+    return clientX >= zone.left && clientX <= zone.right && clientY >= zone.top && clientY <= zone.bottom;
+}
+
+function shouldPlayStaticAmbience() {
+    return isMainPageBuzzState();
+}
+
+function syncStaticAmbience() {
+    if (!staticAmbienceSfx && !buzzLayerSfx) return;
+
+    if (shouldPlayStaticAmbience()) {
+        if (staticAmbienceSfx && staticAmbienceSfx.paused) {
+            staticAmbienceSfx.play().catch(() => {});
+        }
+        if (buzzLayerSfx && buzzLayerSfx.paused) {
+            buzzLayerSfx.play().catch(() => {});
+        }
+    } else {
+        if (staticAmbienceSfx && !staticAmbienceSfx.paused) {
+            staticAmbienceSfx.pause();
+        }
+        if (buzzLayerSfx && !buzzLayerSfx.paused) {
+            buzzLayerSfx.pause();
+        }
+    }
+}
+
+function primeStaticAmbienceOnFirstGesture() {
+    if (staticAmbiencePrimed || !staticAmbienceSfx) return;
+
+    window.addEventListener('pointerdown', () => {
+        if (staticAmbiencePrimed || !staticAmbienceSfx) return;
+        staticAmbiencePrimed = true;
+        syncStaticAmbience();
+    }, { once: true });
+}
+
+function registerStaticBuzzFromPointerMove(clientX, clientY) {
+    if (!isMainPageBuzzState()) {
+        resetStaticBuzzTracking();
+        return;
+    }
+
+    if (!isInsideStaticBuzzZone(clientX, clientY)) {
+        // Keep intensity decay-driven so leaving the zone fades out naturally.
+        resetStaticBuzzPointerTracking();
+        return;
+    }
+
+    staticBuzzPointerInZone = true;
+
+    const now = performance.now();
+
+    if (staticBuzzLastX === null || staticBuzzLastY === null || staticBuzzLastSampleTime === 0) {
+        staticBuzzLastX = clientX;
+        staticBuzzLastY = clientY;
+        staticBuzzLastSampleTime = now;
+        return;
+    }
+
+    const dt = now - staticBuzzLastSampleTime;
+    if (dt < STATIC_BUZZ.sampleMinIntervalMs) return;
+
+    const distance = Math.hypot(clientX - staticBuzzLastX, clientY - staticBuzzLastY);
+    const speedPxPerMs = distance / Math.max(dt, 1);
+
+    const normalizedSpeed = THREE.MathUtils.clamp(
+        (speedPxPerMs - STATIC_BUZZ.minSpeedPxPerMs) /
+        Math.max(0.001, STATIC_BUZZ.maxSpeedPxPerMs - STATIC_BUZZ.minSpeedPxPerMs),
+        0,
+        1
+    );
+
+    if (normalizedSpeed > 0) {
+        const flybyRandomness = 0.85 + (Math.random() * 0.1);
+        staticBuzzIntensity = Math.max(
+            staticBuzzIntensity,
+            normalizedSpeed * flybyRandomness * STATIC_BUZZ.motionIntensityGain
+        );
+    }
+
+    staticBuzzLastX = clientX;
+    staticBuzzLastY = clientY;
+    staticBuzzLastSampleTime = now;
+}
+
+function applyStaticBuzzModulation(delta) {
+    if (!staticAmbienceSfx && !buzzLayerSfx) return;
+
+    if (!shouldPlayStaticAmbience()) {
+        resetStaticBuzzTracking();
+        if (staticAmbienceSfx) {
+            staticAmbienceSfx.playbackRate = STATIC_BUZZ.baseRate;
+            staticAmbienceSfx.volume = STATIC_BUZZ.baseVolume;
+        }
+        if (buzzLayerSfx) {
+            buzzLayerSfx.playbackRate = STATIC_BUZZ.layerBaseRate;
+            buzzLayerSfx.volume = 0;
+        }
+        return;
+    }
+
+    staticBuzzIntensity = Math.max(0, staticBuzzIntensity - (STATIC_BUZZ.decayPerSecond * delta));
+    const buzz = THREE.MathUtils.clamp(staticBuzzIntensity, 0, 1);
+    const flyby = Math.pow(buzz, STATIC_BUZZ.motionCurveExponent);
+
+    const shimmer = buzz > 0.02
+        ? Math.sin(performance.now() * 0.04) * 0.008 * buzz
+        : 0;
+
+    if (staticAmbienceSfx) {
+        staticAmbienceSfx.playbackRate = THREE.MathUtils.clamp(
+            STATIC_BUZZ.baseRate + (STATIC_BUZZ.maxRateBoost * buzz) + shimmer,
+            0.5,
+            2.0
+        );
+        staticAmbienceSfx.volume = THREE.MathUtils.clamp(
+            STATIC_BUZZ.baseVolume + (STATIC_BUZZ.maxVolumeBoost * buzz),
+            0,
+            1
+        );
+    }
+
+    if (buzzLayerSfx) {
+        const flutter = 0.88 + (Math.sin(performance.now() * 0.07) * 0.12);
+        const zoneFloor = staticBuzzPointerInZone ? STATIC_BUZZ.inZoneFloorVolume : 0;
+        const dynamicLayerVolume = STATIC_BUZZ.layerMaxVolume * flyby * flutter;
+        buzzLayerSfx.playbackRate = THREE.MathUtils.clamp(
+            STATIC_BUZZ.layerBaseRate + (STATIC_BUZZ.layerRateBoost * flyby),
+            0.5,
+            2.0
+        );
+        buzzLayerSfx.volume = THREE.MathUtils.clamp(
+            Math.max(zoneFloor, dynamicLayerVolume),
+            0,
+            1
+        );
+    }
+}
+
+function playSwooshSfx() {
+    if (!swooshSfx) return;
+
+    const duration = Number.isFinite(swooshSfx.duration) ? swooshSfx.duration : 0;
+    if (duration > SWOOSH_START_OFFSET_SEC + 0.01) {
+        swooshSfx.currentTime = SWOOSH_START_OFFSET_SEC;
+    } else {
+        swooshSfx.currentTime = 0;
+    }
+
+    swooshSfx.play().catch(() => {});
+}
+
+function primeSwooshOnFirstGesture() {
+    if (swooshPrimed || !swooshSfx) return;
+
+    window.addEventListener('pointerdown', () => {
+        if (swooshPrimed || !swooshSfx) return;
+        swooshPrimed = true;
+
+        const previousMuted = swooshSfx.muted;
+        swooshSfx.muted = true;
+        swooshSfx.currentTime = 0;
+
+        swooshSfx.play()
+            .then(() => {
+                swooshSfx.pause();
+                swooshSfx.currentTime = 0;
+                swooshSfx.muted = previousMuted;
+            })
+            .catch(() => {
+                swooshSfx.muted = previousMuted;
+            });
+    }, { once: true });
+}
+
+function zoomToTapesWithSwoosh() {
+    if (state.targetZoom < 1) {
+        playSwooshSfx();
+    }
+    state.targetZoom = 1;
+}
 
 let projectOpenTimeoutId = null;
 let flipTimeoutId = null;
@@ -625,7 +875,6 @@ preloadSequenceByKey('default', true);
 // --- 3. GLOBAL SCENE ---
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.layers.enable(1);
 
 const renderer = new THREE.WebGLRenderer({
     canvas: document.getElementById("bg-canvas"),
@@ -643,10 +892,7 @@ const perfProfile = (() => {
 
     return {
         lowEnd,
-        pixelRatioCap: lowEnd ? 1.25 : 2,
-        bloomScale: lowEnd ? 0.5 : 0.75,
-        outlineScale: lowEnd ? 0.35 : 0.5,
-        warmupCompile: !lowEnd
+        pixelRatioCap: lowEnd ? 1.25 : 2
     };
 })();
 
@@ -657,35 +903,6 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1;
-
-// Post-Processing
-const hdrRenderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
-    type: THREE.HalfFloatType,
-    format: THREE.RGBAFormat
-});
-
-const renderPass = new RenderPass(scene, camera);
-const composer = new EffectComposer(renderer, hdrRenderTarget);
-composer.addPass(renderPass);
-const usePostProcessing = false;
-
-const bloomPass = new UnrealBloomPass(
-    new THREE.Vector2(window.innerWidth * perfProfile.bloomScale, window.innerHeight * perfProfile.bloomScale),
-    3, 0.5, 1.2
-);
-composer.addPass(bloomPass);
-
-const outlinePass = new OutlinePass(
-    new THREE.Vector2(window.innerWidth * perfProfile.outlineScale, window.innerHeight * perfProfile.outlineScale),
-    scene, camera
-);
-outlinePass.downSampleRatio = perfProfile.lowEnd ? 3 : 2; 
-outlinePass.edgeStrength = perfProfile.lowEnd ? 2.4 : 4.0;
-outlinePass.edgeGlow = perfProfile.lowEnd ? 0.65 : 1.0;
-outlinePass.edgeThickness = perfProfile.lowEnd ? 1.5 : 2.0;
-outlinePass.visibleEdgeColor.set(0x00ff44); 
-outlinePass.hiddenEdgeColor.set(0x002200);
-composer.addPass(outlinePass);
 
 setupSceneLights(scene);
 
@@ -967,7 +1184,7 @@ function handleSystemAction(action) {
             pendingSectionSequenceKey = null;
             activateDefaultSequence(); // <-- Updated
             drawSequence(sequenceTimelineFrame / SEQUENCE_TIMELINE.zoomedLoopEndFrame);
-            state.targetZoom = 1; 
+            zoomToTapesWithSwoosh();
             break;
     }
 }
@@ -991,6 +1208,7 @@ window.addEventListener("mousemove", e => {
     mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
     updateSequenceMouseTrail(e.clientX, e.clientY);
+    registerStaticBuzzFromPointerMove(e.clientX, e.clientY);
 
     if (dragState.awaitingHoverRearm) {
         if (Math.abs(e.clientX - dragState.releaseX) >= DRAG_HOVER_REARM_DISTANCE_PX) {
@@ -1184,7 +1402,7 @@ function onTapeDragMove(e) {
     dragState.lastX = e.clientX;
     if (deltaX === 0) return;
 
-    state.targetZoom = 1;
+    zoomToTapesWithSwoosh();
 
     // The grip strength (6.0 usually feels great here)
     const dynamicScrollFactor = 6.0 / window.innerWidth; 
@@ -1239,7 +1457,7 @@ function applyWheelNavigation(deltaY) {
         // Don't advance tape index until the camera has mostly finished zooming in.
         zoomOutIntent = 0;
         if (state.targetZoom < 1) {
-            state.targetZoom = 1;
+            zoomToTapesWithSwoosh();
             zoomInScrollUnlockAt = now + ZOOM_IN_SCROLL_LOCK_MS;
             return;
         } else if (now < zoomInScrollUnlockAt) {
@@ -1248,6 +1466,7 @@ function applyWheelNavigation(deltaY) {
             return;
         } else if (state.targetScroll < numTapes - 1 - radius) {
             state.targetScroll++;
+            playTapeUiSfx();
         }
     } else if (deltaY < -5) {
         zoomInScrollUnlockAt = 0;
@@ -1259,6 +1478,7 @@ function applyWheelNavigation(deltaY) {
 
         if (state.targetScroll > radius) {
             state.targetScroll--;
+            playTapeUiSfx();
             zoomOutIntent = 0;
         } else {
             // Require a deliberate upward scroll gesture before leaving the first tape.
@@ -1325,10 +1545,6 @@ window.addEventListener("resize", () => {
 
     cachedConfig = getVisibleConfig();
     state.targetScroll = clampTapeTargetScroll(state.targetScroll);
-    outlinePass.resolution.set(
-        window.innerWidth * perfProfile.outlineScale,
-        window.innerHeight * perfProfile.outlineScale
-    );
 });
 
 window.addEventListener('click', () => {
@@ -1337,6 +1553,8 @@ window.addEventListener('click', () => {
 
     if (state.zoom > 0.9 && state.activeTape && !state.isLocked) {
         state.isLocked = true;
+        playSound(projectSelectSfx);
+        setTimeout(() => playSound(tapeInSfx), 250);
         
         // Use the smooth glide speed
         state.scrollSpeed = LOCK_CENTER_SCROLL_SPEED; 
@@ -1374,10 +1592,45 @@ window.addEventListener('click', () => {
     }
 });
 
-window.addEventListener('pageshow', (event) => {
-    if (event.persisted) {
-        restoreArchiveInteractionState();
+function rearmBuzzAfterBrowserNavigation({ fromHistoryRestore = false } = {}) {
+    resetStaticBuzzTracking();
+    syncStaticAmbience();
+
+    // Some browsers resume media/state a beat later after history navigation.
+    setTimeout(() => syncStaticAmbience(), 120);
+    setTimeout(() => syncStaticAmbience(), 420);
+
+    if (!staticAmbiencePrimed) {
+        primeStaticAmbienceOnFirstGesture();
     }
+
+    if (!buzzRearmGestureListenerBound) {
+        buzzRearmGestureListenerBound = true;
+        window.addEventListener('pointerdown', () => {
+            buzzRearmGestureListenerBound = false;
+            syncStaticAmbience();
+        }, { once: true });
+    }
+
+    if (fromHistoryRestore) {
+        requestAnimationFrame(() => syncStaticAmbience());
+    }
+}
+
+window.addEventListener('pageshow', (event) => {
+    const navEntry = (typeof performance.getEntriesByType === 'function')
+        ? performance.getEntriesByType('navigation')[0]
+        : null;
+    const isHistoryNavigation = event.persisted || navEntry?.type === 'back_forward';
+    if (!isHistoryNavigation) return;
+
+    restoreArchiveInteractionState();
+    rearmBuzzAfterBrowserNavigation({ fromHistoryRestore: true });
+});
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    rearmBuzzAfterBrowserNavigation();
 });
 
 // --- TV HOTSPOT LOGIC ---
@@ -1408,6 +1661,8 @@ function animate() {
 
     // 2. Smooth zoom lerp
     state.zoom = THREE.MathUtils.lerp(state.zoom, state.targetZoom, 0.06);
+    syncStaticAmbience();
+    applyStaticBuzzModulation(delta);
 
     if (hotspotContainer) {
         if (state.zoom > 0.1) {
@@ -1479,9 +1734,6 @@ function animate() {
     state.activeTape = hoverSuppressed ? null : (hoveredTapeFromRay || (state.zoom > 0.9 ? currentFrameActiveTape : null));
     state.minDist = currentFrameMinDist;
 
-    const tapeToOutline = state.selectedTape || state.activeTape;
-    outlinePass.selectedObjects = tapeToOutline ? [tapeToOutline] : [];
-
     const hoverFocusTape = (!state.isLocked && state.zoom > 0.9) ? state.activeTape : null;
     const selectedFocusTape = (state.selectedTape && state.selectedTape.visible) ? state.selectedTape : null;
     const focusTape = selectedFocusTape || hoverFocusTape;
@@ -1550,6 +1802,7 @@ function animate() {
             if(hoverUI) hoverUI.classList.remove('visible');
         }
         if (state.activeTape?.userData.action1) {
+            playTapeUiSfx();
             const hov = state.activeTape.userData.action1;
             hov.paused = false; hov.timeScale = 1; hov.play();
             const data = state.activeTape.userData.projectInfo;
@@ -1673,11 +1926,137 @@ function animate() {
         document.body.style.cursor = cursorStyle;
     }
 
-    if (usePostProcessing) {
-        composer.render();
-    } else {
-        renderer.render(scene, camera);
-    }
+    renderer.render(scene, camera);
 }
 
 animate();
+
+const getAudioAssetUrl = (path) => (
+    typeof window.getVersionedAssetUrl === 'function'
+        ? window.getVersionedAssetUrl(path)
+        : path
+);
+
+const buttonClickSfx = new Audio(getAudioAssetUrl('sounds/button_channel.wav'));
+buttonClickSfx.preload = 'auto';
+buttonClickSfx.volume = 0.5;
+
+const hoverSfx = new Audio(getAudioAssetUrl('sounds/hover.wav'));
+hoverSfx.preload = 'auto';
+hoverSfx.volume = 0.28;
+
+const tapeScrollHoverSfx = new Audio(getAudioAssetUrl('sounds/hover.wav'));
+tapeScrollHoverSfx.preload = 'auto';
+tapeScrollHoverSfx.volume = 0.48;
+
+const projectSelectSfx = new Audio(getAudioAssetUrl('sounds/click.wav'));
+projectSelectSfx.preload = 'auto';
+projectSelectSfx.volume = 0.5;
+
+const tapeInSfx = new Audio(getAudioAssetUrl('sounds/tape_in.wav'));
+tapeInSfx.preload = 'auto';
+tapeInSfx.volume = 0.5;
+
+const cameraSwoosh = new Audio(getAudioAssetUrl('sounds/swoosh.wav'));
+cameraSwoosh.preload = 'auto';
+cameraSwoosh.volume = 0.55;
+swooshSfx = cameraSwoosh;
+primeSwooshOnFirstGesture();
+
+const staticAmbience = new Audio(getAudioAssetUrl('sounds/static.wav'));
+staticAmbience.preload = 'auto';
+staticAmbience.loop = true;
+staticAmbience.volume = STATIC_BUZZ.baseVolume;
+staticAmbienceSfx = staticAmbience;
+
+const buzzLayer = new Audio(getAudioAssetUrl('sounds/buzz.wav'));
+buzzLayer.preload = 'auto';
+buzzLayer.loop = true;
+buzzLayer.volume = 0;
+buzzLayer.playbackRate = STATIC_BUZZ.layerBaseRate;
+buzzLayerSfx = buzzLayer;
+
+primeStaticAmbienceOnFirstGesture();
+syncStaticAmbience();
+
+const pageLoadSfx = new Audio(getAudioAssetUrl('sounds/button_channel.wav'));
+pageLoadSfx.preload = 'auto';
+pageLoadSfx.volume = 0.5;
+
+function tryPlaySound(audioObj) {
+    audioObj.currentTime = 0;
+    return audioObj.play();
+}
+
+function playSound(audioObj) {
+    tryPlaySound(audioObj).catch(() => {});
+}
+
+let lastTapeUiSfxAt = 0;
+const TAPE_UI_SFX_COOLDOWN_MS = 90;
+function playTapeUiSfx() {
+    const now = performance.now();
+    if ((now - lastTapeUiSfxAt) < TAPE_UI_SFX_COOLDOWN_MS) return;
+    lastTapeUiSfxAt = now;
+    playSound(tapeScrollHoverSfx);
+}
+
+function queueMainPageLoadSound() {
+    const attemptLoadSound = () => {
+        tryPlaySound(pageLoadSfx).catch(() => {
+            const onFirstPointerDown = (event) => {
+                const handledByOtherClickSfx = event.target instanceof Element
+                    ? event.target.closest('button, .tv-hotspot, #nav-home, #nav-about, #nav-projects, #nav-contact, #nav-logo')
+                    : null;
+
+                if (handledByOtherClickSfx) return;
+
+                playSound(pageLoadSfx);
+                window.removeEventListener('pointerdown', onFirstPointerDown);
+            };
+
+            window.addEventListener('pointerdown', onFirstPointerDown);
+        });
+    };
+
+    if (document.readyState === 'complete') {
+        setTimeout(attemptLoadSound, 120);
+    } else {
+        window.addEventListener('load', () => setTimeout(attemptLoadSound, 120), { once: true });
+    }
+}
+
+if (!window.__mainPageLoadSoundQueued) {
+    window.__mainPageLoadSoundQueued = true;
+    queueMainPageLoadSound();
+}
+
+if (!window.__buttonClickSoundBound) {
+    window.__buttonClickSoundBound = true;
+    document.addEventListener('click', (event) => {
+        const target = event.target instanceof Element
+            ? event.target.closest('button, .tv-hotspot')
+            : null;
+        if (!target) return;
+        playSound(buttonClickSfx);
+    });
+}
+
+const hoverSoundSelector = 'button, .tv-hotspot, #nav-home, #nav-about, #nav-projects, #nav-contact, #nav-logo, #hotspot-email, #hotspot-linkedin';
+if (!window.__hoverSoundBound) {
+    window.__hoverSoundBound = true;
+    document.addEventListener('pointerover', (event) => {
+        const targetEl = event.target instanceof Element ? event.target : null;
+        if (!targetEl) return;
+
+        const currentHoverTarget = targetEl.closest(hoverSoundSelector);
+        if (!currentHoverTarget) return;
+
+        const previousHoverTarget = event.relatedTarget instanceof Element
+            ? event.relatedTarget.closest(hoverSoundSelector)
+            : null;
+
+        if (currentHoverTarget === previousHoverTarget) return;
+        playSound(hoverSfx);
+    });
+}

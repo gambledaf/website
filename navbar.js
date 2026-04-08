@@ -5,6 +5,21 @@ const inSubfolder = window.location.pathname.includes('/filepage/');
 // If we are in the subfolder, we need to go UP one level ("../") to find images and the index.
 const basePath = inSubfolder ? '../' : '';
 
+const getAudioAssetUrl = (path) => (
+    typeof window.getVersionedAssetUrl === 'function'
+        ? window.getVersionedAssetUrl(path)
+        : path
+);
+
+const navClickSfx = new Audio(getAudioAssetUrl(`${basePath}sounds/button_channel.wav`));
+navClickSfx.preload = 'auto';
+navClickSfx.volume = 0.5;
+
+function playNavClickSound() {
+    navClickSfx.currentTime = 0;
+    navClickSfx.play().catch(() => {});
+}
+
 // Basic client-side content protection: disable right-click and drag-save interactions.
 document.addEventListener('contextmenu', (e) => {
     e.preventDefault();
@@ -251,4 +266,15 @@ document.getElementById('nav-contact').addEventListener('click', (e) => handleNa
 
 // Make clicking the logo take you home, just like before
 document.getElementById('nav-logo').addEventListener('click', (e) => handleNavClick(e, "home"));
+
+if (!window.__navClickSoundBound) {
+    window.__navClickSoundBound = true;
+    document.addEventListener('pointerdown', (event) => {
+        const target = event.target instanceof Element
+            ? event.target.closest('#nav-home, #nav-about, #nav-projects, #nav-contact, #nav-logo')
+            : null;
+        if (!target) return;
+        playNavClickSound();
+    });
+}
 
