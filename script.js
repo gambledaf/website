@@ -21,7 +21,7 @@ function getVisibleConfig() {
     
     if (aspect < 0.8) {
         // Tall, narrow screens (Mobile phones in portrait mode)
-        count = 5; 
+        count = isCoarsePointerDevice ? 3 : 5;
     } else if (aspect < 1.4) {
         // Square-ish screens (Tablets, or slightly squished browser windows)
         count = 7; 
@@ -29,6 +29,11 @@ function getVisibleConfig() {
     
     return { count, radius: (count - 1) / 2 };
 }
+
+const isCoarsePointerDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const DISABLE_PHONE_SEQUENCE_BLEND = isCoarsePointerDevice;
+const DISABLE_PHONE_BUZZ_AUDIO = isCoarsePointerDevice;
 
 
 
@@ -51,6 +56,7 @@ const state = {
     scrollSpeed: 0.1,
     minDist: 999
 };
+let touchFocusedTape = null;
 
 let swooshSfx = null;
 let swooshPrimed = false;
@@ -58,23 +64,24 @@ const SWOOSH_START_OFFSET_SEC = 0.1;
 let staticAmbienceSfx = null;
 let buzzLayerSfx = null;
 let staticAmbiencePrimed = false;
+let staticAmbienceUnlockBound = false;
 let buzzRearmGestureListenerBound = false;
 const STATIC_PROJECTS_ZOOM_THRESHOLD = 0.45;
 const STATIC_BUZZ = {
     baseVolume: 0.02,
-    maxVolumeBoost: 0.01,
+    maxVolumeBoost: 0.012,
     baseRate: 0.98,
-    maxRateBoost: 0.12,
+    maxRateBoost: 0.2,
     layerMaxVolume: 0.05,
     layerBaseRate: 0.95,
-    layerRateBoost: 0.12,
+    layerRateBoost: 0.24,
     inZoneFloorVolume: 0.006,
-    minSpeedPxPerMs: 0.35,
-    maxSpeedPxPerMs: 2.2,
-    decayPerSecond: 3.4,
-    motionIntensityGain: 0.55,
-    motionCurveExponent: 2.1,
-    sampleMinIntervalMs: 12
+    minSpeedPxPerMs: 0.12,
+    maxSpeedPxPerMs: 1.4,
+    decayPerSecond: 2.4,
+    motionIntensityGain: 0.95,
+    motionCurveExponent: 1.45,
+    sampleMinIntervalMs: 10
 };
 const STATIC_BUZZ_ZONE = {
     xPct: 0.39,
@@ -133,31 +140,76 @@ function shouldPlayStaticAmbience() {
 function syncStaticAmbience() {
     if (!staticAmbienceSfx && !buzzLayerSfx) return;
 
-    if (shouldPlayStaticAmbience()) {
+    // Keep ambience loops running once primed to avoid audible stop/restart seams.
+    if (staticAmbiencePrimed) {
         if (staticAmbienceSfx && staticAmbienceSfx.paused) {
             staticAmbienceSfx.play().catch(() => {});
         }
         if (buzzLayerSfx && buzzLayerSfx.paused) {
             buzzLayerSfx.play().catch(() => {});
         }
-    } else {
-        if (staticAmbienceSfx && !staticAmbienceSfx.paused) {
-            staticAmbienceSfx.pause();
-        }
-        if (buzzLayerSfx && !buzzLayerSfx.paused) {
-            buzzLayerSfx.pause();
-        }
     }
 }
 
 function primeStaticAmbienceOnFirstGesture() {
-    if (staticAmbiencePrimed || !staticAmbienceSfx) return;
+    if (staticAmbiencePrimed || !staticAmbienceSfx || staticAmbienceUnlockBound) return;
+    staticAmbienceUnlockBound = true;
 
-    window.addEventListener('pointerdown', () => {
-        if (staticAmbiencePrimed || !staticAmbienceSfx) return;
+    const eventOptions = { capture: true };
+    const unlockEvents = ['pointerdown', 'touchstart', 'wheel', 'keydown'];
+
+    const cleanupUnlockListeners = () => {
+        staticAmbienceUnlockBound = false;
+        unlockEvents.forEach((eventName) => {
+            window.removeEventListener(eventName, unlockFromGesture, eventOptions);
+        });
+    };
+
+    const unlockFromGesture = () => {
+        if (staticAmbiencePrimed || !staticAmbienceSfx) {
+            cleanupUnlockListeners();
+            return;
+        }
+
         staticAmbiencePrimed = true;
+        if (staticAmbienceSfx && staticAmbienceSfx.paused) {
+            staticAmbienceSfx.play().catch(() => {});
+        }
+        if (buzzLayerSfx && buzzLayerSfx.paused) {
+            buzzLayerSfx.play().catch(() => {});
+        }
         syncStaticAmbience();
-    }, { once: true });
+        cleanupUnlockListeners();
+    };
+
+    unlockEvents.forEach((eventName) => {
+        window.addEventListener(eventName, unlockFromGesture, eventOptions);
+    });
+}
+
+function bootstrapStaticAmbienceAutoplay() {
+    if (!staticAmbienceSfx && !buzzLayerSfx) return;
+
+    const ambiencePlayers = [staticAmbienceSfx, buzzLayerSfx].filter(Boolean);
+    ambiencePlayers.forEach((audioObj) => {
+        audioObj.muted = true;
+    });
+
+    Promise.all(ambiencePlayers.map((audioObj) => audioObj.play()))
+        .then(() => {
+            staticAmbiencePrimed = true;
+            ambiencePlayers.forEach((audioObj) => {
+                audioObj.muted = false;
+            });
+            syncStaticAmbience();
+        })
+        .catch(() => {
+            ambiencePlayers.forEach((audioObj) => {
+                audioObj.muted = false;
+            });
+            primeStaticAmbienceOnFirstGesture();
+            syncStaticAmbience();
+        });
 }
 
 function registerStaticBuzzFromPointerMove(clientX, clientY) {
@@ -438,13 +490,13 @@ const SEQUENCE_BLEND = {
 };
 
 const SEQUENCE_MOUSE_TRAIL = {
-    maxPoints: 14,
-    lifetimeMs: 420,
+    maxPoints: isCoarsePointerDevice ? 8 : 14,
+    lifetimeMs: isCoarsePointerDevice ? 280 : 420,
     minSampleDistance: 0.01,
-    minSampleIntervalMs: 14,
+    minSampleIntervalMs: isCoarsePointerDevice ? 18 : 14,
     tailOpacity: 0.55,
-    tailRadiusStart: 0.9,
-    tailRadiusEnd: 0.7
+    tailRadiusStart: isCoarsePointerDevice ? 0.7 : 0.9,
+    tailRadiusEnd: isCoarsePointerDevice ? 0.55 : 0.7
 };
 
 const SEQUENCE_TIMELINE = {
@@ -539,7 +591,7 @@ function activateSectionSequence(sequenceKey) {
 }
 
 // --- ADD THIS NEW HELPER ---
-function activateDefaultSequence({ playPowerOn = true, resetFrame = true } = {}) {
+function activateDefaultSequence({ playPowerOn = true, resetFrame = true, forceRestartIfDefault = false } = {}) {
     if (activeSequenceKey !== 'default') {
         activeSequenceKey = 'default';
         preloadSequenceByKey('default', false);
@@ -554,6 +606,19 @@ function activateDefaultSequence({ playPowerOn = true, resetFrame = true } = {})
             defaultPowerOnPlayed = true;
         }
         
+        lastDrawnSequenceKey = null;
+        lastDrawnFrame = -1;
+    } else if (forceRestartIfDefault) {
+        if (playPowerOn) {
+            if (resetFrame) sequenceTimelineFrame = 0;
+            defaultPowerOnPlayed = false;
+        } else {
+            if (resetFrame) {
+                sequenceTimelineFrame = Math.max(sequenceTimelineFrame, SEQUENCE_TIMELINE.loopStartFrame);
+            }
+            defaultPowerOnPlayed = true;
+        }
+
         lastDrawnSequenceKey = null;
         lastDrawnFrame = -1;
     }
@@ -682,6 +747,7 @@ function preloadSequenceByKey(sequenceKey, shouldTrackBootProgress = false) {
 }
 
 function preloadSequence2() {
+    if (DISABLE_PHONE_SEQUENCE_BLEND) return;
     if (sequence2Preloaded) return;
     sequence2Preloaded = true;
 
@@ -698,6 +764,7 @@ function preloadSequence2() {
 }
 
 function getSequence2BlendAlpha() {
+    if (DISABLE_PHONE_SEQUENCE_BLEND) return 0;
     if (activeSequenceKey !== 'default') return 0;
 
     if (!sequence2Preloaded) {
@@ -878,7 +945,7 @@ const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerH
 
 const renderer = new THREE.WebGLRenderer({
     canvas: document.getElementById("bg-canvas"),
-    antialias: true,
+    antialias: !isCoarsePointerDevice,
     alpha: true,
     premultipliedAlpha: false // Keeps alpha compositing predictable over the sequence canvas
 });
@@ -888,18 +955,28 @@ const perfProfile = (() => {
     const cores = navigator.hardwareConcurrency || 8;
     const memory = navigator.deviceMemory || 8;
     const smallScreen = Math.min(window.innerWidth, window.innerHeight) < 800;
-    const lowEnd = cores <= 4 || memory <= 4 || smallScreen;
+    const lowEnd = cores <= 4 || memory <= 4 || smallScreen || isCoarsePointerDevice || prefersReducedMotion;
 
     return {
         lowEnd,
-        pixelRatioCap: lowEnd ? 1.25 : 2
+        pixelRatioCap: lowEnd ? 1 : 2
     };
 })();
 
-renderer.setSize(window.innerWidth, window.innerHeight);
+const MOBILE_RENDER_SCALE = isCoarsePointerDevice ? 0.72 : 1;
+
+function updateRendererResolution() {
+    const renderWidth = Math.max(1, Math.floor(window.innerWidth * MOBILE_RENDER_SCALE));
+    const renderHeight = Math.max(1, Math.floor(window.innerHeight * MOBILE_RENDER_SCALE));
+    renderer.setSize(renderWidth, renderHeight, false);
+}
+
+updateRendererResolution();
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, perfProfile.pixelRatioCap));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = !perfProfile.lowEnd;
+if (renderer.shadowMap.enabled) {
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+}
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1;
@@ -909,6 +986,7 @@ setupSceneLights(scene);
 // --- 4. SCENE DATA ---
 const mouse = new THREE.Vector2(-100, -100);
 const raycaster = new THREE.Raycaster();
+const pointerNdc = new THREE.Vector2();
 const clock = new THREE.Clock();
 const tempVec = new THREE.Vector3();
 
@@ -921,6 +999,20 @@ function getTapeRootFromObject(object3D) {
         current = current.parent;
     }
     return null;
+}
+
+function getTapeAtClientPosition(clientX, clientY) {
+    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+    if (state.zoom <= 0.9) return null;
+
+    pointerNdc.x = (clientX / window.innerWidth) * 2 - 1;
+    pointerNdc.y = -(clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(pointerNdc, camera);
+    const hits = raycaster.intersectObjects(tapes, true);
+    if (hits.length === 0) return null;
+
+    return getTapeRootFromObject(hits[0].object);
 }
 
 // --- 5. LOAD MODELS & LOADING SCREEN ---
@@ -1175,9 +1267,11 @@ function handleSystemAction(action) {
 
     switch (action) {
         case "home":
+            pendingMenuAction = null;
+            pendingScrollDelta = 0;
             pendingSectionSequenceKey = null;
-            activateDefaultSequence(); // <-- Updated
-            drawSequence(sequenceTimelineFrame / SEQUENCE_TIMELINE.zoomedLoopEndFrame);
+            activateDefaultSequence({ playPowerOn: true, resetFrame: true, forceRestartIfDefault: true });
+            drawSequence(0);
             state.targetZoom = 0;
             break;
         case "projects":
@@ -1207,8 +1301,12 @@ function openProjectPage(data) {
 window.addEventListener("mousemove", e => {
     mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-    updateSequenceMouseTrail(e.clientX, e.clientY);
-    registerStaticBuzzFromPointerMove(e.clientX, e.clientY);
+    if (!isCoarsePointerDevice) {
+        updateSequenceMouseTrail(e.clientX, e.clientY);
+    }
+    if (!DISABLE_PHONE_BUZZ_AUDIO) {
+        registerStaticBuzzFromPointerMove(e.clientX, e.clientY);
+    }
 
     if (dragState.awaitingHoverRearm) {
         if (Math.abs(e.clientX - dragState.releaseX) >= DRAG_HOVER_REARM_DISTANCE_PX) {
@@ -1420,6 +1518,12 @@ function onTapeDragEnd(e) {
     if (!dragState.active) return;
 
     if (dragState.moved) {
+        if (isCoarsePointerDevice) {
+            // Phone swipe should settle on a tape slot, not between tapes.
+            const snappedTarget = clampTapeTargetScroll(Math.round(state.targetScroll));
+            state.targetScroll = snappedTarget;
+        }
+
         dragState.suppressClickUntil = performance.now() + DRAG_CLICK_SUPPRESS_MS;
         dragState.awaitingHoverRearm = true;
         dragState.releaseX = typeof e?.clientX === 'number' ? e.clientX : dragState.lastX;
@@ -1492,15 +1596,15 @@ function applyWheelNavigation(deltaY) {
     }
 }
 
-window.addEventListener("wheel", e => {
+function handleScrollInputDelta(deltaY) {
     if (scrollCooldown) return;
-    if (Math.abs(e.deltaY) <= 5) return;
+    if (Math.abs(deltaY) <= 5) return;
 
     // If user scrolls while in About/Contact, play default 0-20 first, then apply scroll intent.
     if (activeSequenceKey !== 'default') {
         pendingSectionSequenceKey = null;
         pendingMenuAction = null;
-        pendingScrollDelta = e.deltaY;
+        pendingScrollDelta = deltaY;
         activateDefaultSequence({ playPowerOn: true, resetFrame: true });
         state.targetZoom = 0;
         triggerCooldown();
@@ -1509,19 +1613,68 @@ window.addEventListener("wheel", e => {
 
     // While default power-on is playing, queue latest scroll and apply after intro completes.
     if (!defaultPowerOnPlayed) {
-        pendingScrollDelta = e.deltaY;
+        pendingScrollDelta = deltaY;
         triggerCooldown();
         return;
     }
 
     const prevZoom = state.targetZoom;
     const prevScroll = state.targetScroll;
-    applyWheelNavigation(e.deltaY);
+    applyWheelNavigation(deltaY);
 
     if (state.targetZoom !== prevZoom || state.targetScroll !== prevScroll) {
         triggerCooldown();
     }
+}
+
+window.addEventListener("wheel", e => {
+    handleScrollInputDelta(e.deltaY);
 });
+
+if (isCoarsePointerDevice) {
+    let touchScrollLastX = null;
+    let touchScrollLastY = null;
+    let touchScrollAccumY = 0;
+    const TOUCH_SCROLL_STEP_PX = 22;
+
+    window.addEventListener('touchstart', (event) => {
+        if (event.touches.length !== 1) return;
+        const touch = event.touches[0];
+        touchScrollLastX = touch.clientX;
+        touchScrollLastY = touch.clientY;
+        touchScrollAccumY = 0;
+    }, { passive: true });
+
+    window.addEventListener('touchmove', (event) => {
+        if (event.touches.length !== 1 || touchScrollLastY === null || touchScrollLastX === null) return;
+        const touch = event.touches[0];
+
+        const deltaX = touch.clientX - touchScrollLastX;
+        const deltaY = touch.clientY - touchScrollLastY;
+        touchScrollLastX = touch.clientX;
+        touchScrollLastY = touch.clientY;
+
+        // Ignore mostly horizontal gestures so drag interactions remain natural.
+        if (Math.abs(deltaY) < Math.abs(deltaX) * 1.15) return;
+
+        // Swipe up should behave like wheel scroll down (zoom/move into tapes).
+        touchScrollAccumY += -deltaY;
+        if (Math.abs(touchScrollAccumY) < TOUCH_SCROLL_STEP_PX) return;
+
+        handleScrollInputDelta(touchScrollAccumY);
+        touchScrollAccumY = 0;
+        event.preventDefault();
+    }, { passive: false });
+
+    const resetTouchScrollState = () => {
+        touchScrollLastX = null;
+        touchScrollLastY = null;
+        touchScrollAccumY = 0;
+    };
+
+    window.addEventListener('touchend', resetTouchScrollState, { passive: true });
+    window.addEventListener('touchcancel', resetTouchScrollState, { passive: true });
+}
 
 function triggerCooldown() {
     scrollCooldown = true;
@@ -1531,7 +1684,7 @@ function triggerCooldown() {
 window.addEventListener("resize", () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    updateRendererResolution();
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, perfProfile.pixelRatioCap));
     
     if (seqCanvas) {
@@ -1547,22 +1700,39 @@ window.addEventListener("resize", () => {
     state.targetScroll = clampTapeTargetScroll(state.targetScroll);
 });
 
-window.addEventListener('click', () => {
+window.addEventListener('click', (event) => {
     if (dragState.awaitingHoverRearm) return;
     if (performance.now() < dragState.suppressClickUntil) return;
 
-    if (state.zoom > 0.9 && state.activeTape && !state.isLocked) {
+    if (state.zoom > 0.9 && !state.isLocked) {
+        const clickedTape = getTapeAtClientPosition(event.clientX, event.clientY) || state.activeTape;
+        if (!clickedTape) return;
+
+        if (isCoarsePointerDevice && touchFocusedTape !== clickedTape) {
+            // On touch devices: first tap focuses/hovers, second tap inserts.
+            touchFocusedTape = clickedTape;
+            state.scrollSpeed = LOCK_FOCUS_SCROLL_SPEED;
+            state.targetScroll = clampTapeTargetScroll(clickedTape.userData.index);
+            if (state.previousTape === clickedTape) {
+                // Force hover branch to run so first tap replays hover animation/UI.
+                state.previousTape = null;
+            }
+            state.activeTape = clickedTape;
+            return;
+        }
+
+        touchFocusedTape = null;
         state.isLocked = true;
         playSound(projectSelectSfx);
         setTimeout(() => playSound(tapeInSfx), 250);
         
         // Use the smooth glide speed
         state.scrollSpeed = LOCK_CENTER_SCROLL_SPEED; 
-        state.selectedTape = state.activeTape;
-        state.targetScroll = state.activeTape.userData.index;
+        state.selectedTape = clickedTape;
+        state.targetScroll = clickedTape.userData.index;
 
         // Keep the fix that instantly straightens the tape!
-        state.activeTape.rotation.set(0, 0, 0);
+        clickedTape.rotation.set(0, 0, 0);
 
         projectOpenTimeoutId = setTimeout(() => {
             projectOpenTimeoutId = null;
@@ -1572,8 +1742,8 @@ window.addEventListener('click', () => {
             openProjectPage(selectedProjectData);
         }, 1500); 
         
-        const hov = state.selectedTape.userData.action1;
-        const flip = state.selectedTape.userData.action2;
+        const hov = clickedTape.userData.action1;
+        const flip = clickedTape.userData.action2;
 
         // RESTORED: The classic, snappy 400ms timing with no weird math delays!
         flipTimeoutId = setTimeout(() => {
@@ -1593,6 +1763,8 @@ window.addEventListener('click', () => {
 });
 
 function rearmBuzzAfterBrowserNavigation({ fromHistoryRestore = false } = {}) {
+    if (DISABLE_PHONE_BUZZ_AUDIO) return;
+
     resetStaticBuzzTracking();
     syncStaticAmbience();
 
@@ -1637,10 +1809,14 @@ document.addEventListener('visibilitychange', () => {
 const hotspotContainer = document.getElementById('hotspot-container');
 
 // 1. Wire up the clicks (Power is removed)
-document.getElementById('hotspot-menu')?.addEventListener('click', () => handleSystemAction('home'));
-document.getElementById('hotspot-about')?.addEventListener('click', () => handleSystemAction('about'));
-document.getElementById('hotspot-projects')?.addEventListener('click', () => handleSystemAction('projects'));
-document.getElementById('hotspot-contact')?.addEventListener('click', () => handleSystemAction('contact'));
+if (isCoarsePointerDevice) {
+    hotspotContainer?.classList.add('disable-tv-hotspots');
+} else {
+    document.getElementById('hotspot-menu')?.addEventListener('click', () => handleSystemAction('home'));
+    document.getElementById('hotspot-about')?.addEventListener('click', () => handleSystemAction('about'));
+    document.getElementById('hotspot-projects')?.addEventListener('click', () => handleSystemAction('projects'));
+    document.getElementById('hotspot-contact')?.addEventListener('click', () => handleSystemAction('contact'));
+}
 
 // 2. Hide them when zooming in (Add this logic inside your Animate loop)
 
@@ -1731,7 +1907,24 @@ function animate() {
         }
     }
 
-    state.activeTape = hoverSuppressed ? null : (hoveredTapeFromRay || (state.zoom > 0.9 ? currentFrameActiveTape : null));
+    let nextActiveTape = hoverSuppressed ? null : (hoveredTapeFromRay || (state.zoom > 0.9 ? currentFrameActiveTape : null));
+
+    if (isCoarsePointerDevice) {
+        if (state.zoom <= 0.9 || state.isLocked || hoverSuppressed) {
+            touchFocusedTape = null;
+            nextActiveTape = null;
+        } else if (touchFocusedTape && touchFocusedTape.visible) {
+            nextActiveTape = touchFocusedTape;
+        } else {
+            // On phone, only intentional tap-focus should activate hover/description.
+            if (touchFocusedTape && !touchFocusedTape.visible) {
+                touchFocusedTape = null;
+            }
+            nextActiveTape = null;
+        }
+    }
+
+    state.activeTape = nextActiveTape;
     state.minDist = currentFrameMinDist;
 
     const hoverFocusTape = (!state.isLocked && state.zoom > 0.9) ? state.activeTape : null;
@@ -1963,25 +2156,22 @@ cameraSwoosh.volume = 0.55;
 swooshSfx = cameraSwoosh;
 primeSwooshOnFirstGesture();
 
-const staticAmbience = new Audio(getAudioAssetUrl('sounds/static.wav'));
-staticAmbience.preload = 'auto';
-staticAmbience.loop = true;
-staticAmbience.volume = STATIC_BUZZ.baseVolume;
-staticAmbienceSfx = staticAmbience;
+if (!DISABLE_PHONE_BUZZ_AUDIO) {
+    const staticAmbience = new Audio(getAudioAssetUrl('sounds/static.wav'));
+    staticAmbience.preload = 'auto';
+    staticAmbience.loop = true;
+    staticAmbience.volume = STATIC_BUZZ.baseVolume;
+    staticAmbienceSfx = staticAmbience;
 
-const buzzLayer = new Audio(getAudioAssetUrl('sounds/buzz.wav'));
-buzzLayer.preload = 'auto';
-buzzLayer.loop = true;
-buzzLayer.volume = 0;
-buzzLayer.playbackRate = STATIC_BUZZ.layerBaseRate;
-buzzLayerSfx = buzzLayer;
+    const buzzLayer = new Audio(getAudioAssetUrl('sounds/buzz.wav'));
+    buzzLayer.preload = 'auto';
+    buzzLayer.loop = true;
+    buzzLayer.volume = 0;
+    buzzLayer.playbackRate = STATIC_BUZZ.layerBaseRate;
+    buzzLayerSfx = buzzLayer;
 
-primeStaticAmbienceOnFirstGesture();
-syncStaticAmbience();
-
-const pageLoadSfx = new Audio(getAudioAssetUrl('sounds/button_channel.wav'));
-pageLoadSfx.preload = 'auto';
-pageLoadSfx.volume = 0.5;
+    bootstrapStaticAmbienceAutoplay();
+}
 
 function tryPlaySound(audioObj) {
     audioObj.currentTime = 0;
@@ -2001,36 +2191,6 @@ function playTapeUiSfx() {
     playSound(tapeScrollHoverSfx);
 }
 
-function queueMainPageLoadSound() {
-    const attemptLoadSound = () => {
-        tryPlaySound(pageLoadSfx).catch(() => {
-            const onFirstPointerDown = (event) => {
-                const handledByOtherClickSfx = event.target instanceof Element
-                    ? event.target.closest('button, .tv-hotspot, #nav-home, #nav-about, #nav-projects, #nav-contact, #nav-logo')
-                    : null;
-
-                if (handledByOtherClickSfx) return;
-
-                playSound(pageLoadSfx);
-                window.removeEventListener('pointerdown', onFirstPointerDown);
-            };
-
-            window.addEventListener('pointerdown', onFirstPointerDown);
-        });
-    };
-
-    if (document.readyState === 'complete') {
-        setTimeout(attemptLoadSound, 120);
-    } else {
-        window.addEventListener('load', () => setTimeout(attemptLoadSound, 120), { once: true });
-    }
-}
-
-if (!window.__mainPageLoadSoundQueued) {
-    window.__mainPageLoadSoundQueued = true;
-    queueMainPageLoadSound();
-}
-
 if (!window.__buttonClickSoundBound) {
     window.__buttonClickSoundBound = true;
     document.addEventListener('click', (event) => {
@@ -2043,7 +2203,7 @@ if (!window.__buttonClickSoundBound) {
 }
 
 const hoverSoundSelector = 'button, .tv-hotspot, #nav-home, #nav-about, #nav-projects, #nav-contact, #nav-logo, #hotspot-email, #hotspot-linkedin';
-if (!window.__hoverSoundBound) {
+if (!window.__hoverSoundBound && !isCoarsePointerDevice) {
     window.__hoverSoundBound = true;
     document.addEventListener('pointerover', (event) => {
         const targetEl = event.target instanceof Element ? event.target : null;

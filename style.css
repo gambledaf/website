@@ -53,6 +53,8 @@ body {
     color: var(--crt-green);
     font-family: 'VT323', monospace;
     overflow-x: hidden; /* Prevent horizontal scroll */
+    min-height: 100dvh;
+    -webkit-text-size-adjust: 100%;
 }
 
 /* ========================================== */
@@ -71,6 +73,7 @@ body {
     position: fixed;
     top: 0; left: 0;
     width: 100vw; height: 100vh;
+    height: 100dvh;
     z-index: 1;
     background: #000;
 }
@@ -81,10 +84,12 @@ body {
     top: 0; left: 0;
     width: 100vw;
     height: 100vh;
+    height: 100dvh;
     background: transparent;
     mix-blend-mode: normal;
     z-index: 2;
     pointer-events: auto; /* Allows clicking on 3D tapes */
+    touch-action: pan-y;
 }
 
 /* ========================================== */
@@ -94,6 +99,7 @@ body {
     position: fixed;
     top: 0; left: 0;
     width: 100vw; height: 100vh;
+    height: 100dvh;
     z-index: 9999;
     background: radial-gradient(circle at center, #051a11 0%, var(--bg-black) 100%);
     display: flex; justify-content: center; align-items: center;
@@ -202,6 +208,13 @@ body {
     background-repeat: no-repeat;
     background-position: center 56%;
     background-size: 100% 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+.retro-nav-links::-webkit-scrollbar {
+    display: none;
 }
 
 .retro-logo {
@@ -239,6 +252,7 @@ body {
     text-shadow: none;
     transition: var(--smooth), text-decoration-color var(--smooth);
     opacity: 0.95;
+    white-space: nowrap;
 }
 
 .retro-nav-links a:hover {
@@ -311,7 +325,7 @@ body {
     /* THE MAGIC MATH: Mimics a 16:9 Canvas Cover Crop */
     width: 100vw;
     height: 56.25vw; 
-    min-height: 100vh;
+    min-height: 100dvh;
     min-width: 177.77vh; 
 
     /* Contact email hotspot calibration (percentage-based so it scales with the 16:9 container). */
@@ -339,6 +353,11 @@ body {
     pointer-events: none !important;
 }
 
+#hotspot-container.disable-tv-hotspots .tv-hotspot {
+    display: none;
+    pointer-events: none !important;
+}
+
 /* 1. THE INVISIBLE DETECTION AREA (The Hitbox) */
 .tv-hotspot {
     position: absolute;
@@ -347,6 +366,7 @@ body {
     
     /* Make this large enough to easily catch the mouse */
     width: 3.5%; 
+    min-width: 26px;
     aspect-ratio: 1 / 1;
     border-radius: 50%;
     
@@ -516,6 +536,7 @@ body {
     display: none;
     transition: opacity 0.22s ease, transform 0.2s ease, box-shadow 0.2s ease;
     box-shadow: inset 0 0 0 1px rgba(var(--crt-green-rgb), 0.2);
+    touch-action: manipulation;
 }
 
 #copyEmailBtn:hover {
@@ -547,4 +568,154 @@ body {
 #hotspot-container.contact-active #hotspot-linkedin {
     opacity: 1;
     pointer-events: auto;
+}
+
+@media (max-width: 900px) {
+    body.main-page {
+        overflow-y: hidden;
+        overscroll-behavior-y: none;
+    }
+
+    body.main-page #scroll-track {
+        height: 100dvh;
+    }
+
+    :root {
+        --nav-height: 72px;
+        --logo-size: 96px;
+        --logo-left: 8px;
+    }
+
+    .retro-header {
+        padding-right: 12px;
+        padding-left: calc(var(--logo-left) + var(--logo-size) + 12px);
+    }
+
+    .retro-nav-links {
+        gap: 12px;
+        padding: 0 12px;
+    }
+
+    .retro-nav-links a {
+        font-size: 1.2rem;
+    }
+
+    #tape-hover-ui {
+        top: auto;
+        bottom: 38vh;
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(88vw, 460px);
+        padding: 8px 10px;
+        border: 1px solid rgba(var(--crt-green-rgb), 0.45);
+        background: rgba(1, 6, 4, 0.8);
+        box-shadow: 0 0 12px rgba(var(--crt-green-rgb), 0.25);
+    }
+
+    #tape-hover-ui .hud-line {
+        justify-content: center;
+        text-align: center;
+        margin-bottom: 4px;
+        font-size: clamp(0.95rem, 2.8vw, 1.2rem);
+    }
+
+    #tape-hover-ui .hover-desc {
+        margin-left: 0;
+        font-size: clamp(0.8rem, 2.3vw, 1rem);
+        text-align: center;
+    }
+
+    #copyEmailBtn {
+        min-width: 148px;
+        height: 40px;
+        font-size: 1.1rem;
+        top: calc(50% - 74px);
+    }
+}
+
+@media (max-width: 640px) {
+    :root {
+        --nav-height: 58px;
+        --logo-size: 56px;
+        --logo-left: 6px;
+    }
+
+    .retro-logo {
+        display: block;
+        top: 2px;
+        left: var(--logo-left);
+    }
+
+    .retro-header {
+        padding-top: 6px;
+        padding-bottom: 6px;
+        padding-right: 6px;
+        padding-left: calc(var(--logo-left) + var(--logo-size) + 8px);
+    }
+
+    .retro-nav-links {
+        width: auto;
+        max-width: calc(100vw - (var(--logo-left) + var(--logo-size) + 16px));
+        justify-content: flex-end;
+        gap: 6px;
+        padding: 0 6px;
+        min-height: 46px;
+        overflow-x: auto;
+    }
+
+    .retro-nav-links a {
+        font-size: 0.8rem;
+        letter-spacing: 0.01em;
+    }
+
+    .retro-logo-image {
+        height: var(--logo-size);
+    }
+
+    #loading-screen {
+        padding: 10px;
+    }
+
+    .progress-box {
+        width: min(90vw, 360px);
+    }
+
+    #hotspot-container {
+        --email-hotspot-width: 26%;
+        --linkedin-hotspot-width: 26%;
+        --email-hotspot-height: 7%;
+        --linkedin-hotspot-height: 7%;
+    }
+
+    .tv-hotspot {
+        width: 8.2%;
+        min-width: 34px;
+    }
+
+    #copyEmailBtn {
+        min-width: 138px;
+        height: 38px;
+        font-size: 1rem;
+    }
+
+    #copyFeedback {
+        font-size: 1rem;
+    }
+
+    #tape-hover-ui {
+        bottom: 65vh;
+        width: min(92vw, 420px);
+        padding: 7px 8px;
+    }
+}
+
+@media (max-width: 380px) {
+    .retro-nav-links {
+        gap: 4px;
+        padding: 0 4px;
+    }
+
+    .retro-nav-links a {
+        font-size: 0.74rem;
+    }
 }
