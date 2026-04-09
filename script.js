@@ -30,6 +30,16 @@ function getVisibleConfig() {
     return { count, radius: (count - 1) / 2 };
 }
 
+const REFERENCE_ANIMATION_FPS = 180;
+
+function getFrameRateIndependentLerpFactor(frameLerpFactor, deltaSeconds, referenceFps = REFERENCE_ANIMATION_FPS) {
+    if (frameLerpFactor <= 0 || deltaSeconds <= 0) return 0;
+    if (frameLerpFactor >= 1) return 1;
+
+    const scaledFrames = deltaSeconds * referenceFps;
+    return 1 - Math.pow(1 - frameLerpFactor, scaledFrames);
+}
+
 const isCoarsePointerDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const DISABLE_PHONE_SEQUENCE_BLEND = isCoarsePointerDevice;
@@ -1824,6 +1834,13 @@ if (isCoarsePointerDevice) {
 function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
+    const zoomLerpFactor = getFrameRateIndependentLerpFactor(0.06, delta);
+    const scrollLerpFactor = getFrameRateIndependentLerpFactor(state.scrollSpeed, delta);
+    const tapeRotationLerpFactor = getFrameRateIndependentLerpFactor(0.1, delta);
+    const cameraLerpFactor = getFrameRateIndependentLerpFactor(0.04, delta);
+    const sequenceTransitionLerpFactor = getFrameRateIndependentLerpFactor(0.2, delta);
+    const highlightColorLerpFactor = getFrameRateIndependentLerpFactor(TAPE_HIGHLIGHT.colorLerp, delta);
+    const highlightEmissiveLerpFactor = getFrameRateIndependentLerpFactor(TAPE_HIGHLIGHT.emissiveLerp, delta);
     const hoverSuppressed = dragState.moved || dragState.awaitingHoverRearm || performance.now() < dragState.hoverSuppressUntil;
 
     // 1. SCROLL WHEEL OVERRIDE
@@ -1836,7 +1853,7 @@ function animate() {
     }
 
     // 2. Smooth zoom lerp
-    state.zoom = THREE.MathUtils.lerp(state.zoom, state.targetZoom, 0.06);
+    state.zoom = THREE.MathUtils.lerp(state.zoom, state.targetZoom, zoomLerpFactor);
     syncStaticAmbience();
     applyStaticBuzzModulation(delta);
 
@@ -1867,7 +1884,7 @@ function animate() {
     }
 
     // 4. SCROLL TAPES
-    state.currentScroll = THREE.MathUtils.lerp(state.currentScroll, state.targetScroll, state.scrollSpeed);
+    state.currentScroll = THREE.MathUtils.lerp(state.currentScroll, state.targetScroll, scrollLerpFactor);
 
     const { radius } = cachedConfig; 
     const center = Math.round(state.currentScroll);
@@ -1949,13 +1966,13 @@ function animate() {
                 if (hasFocusCandidate) {
                     if (highlighted) {
                         TAPE_TMP_COLOR.copy(mat.userData.baseColor).lerp(TAPE_HIGHLIGHT_COLOR, TAPE_HIGHLIGHT.colorLift);
-                        mat.color.lerp(TAPE_TMP_COLOR, TAPE_HIGHLIGHT.colorLerp);
+                        mat.color.lerp(TAPE_TMP_COLOR, highlightColorLerpFactor);
                     } else {
                         TAPE_TMP_COLOR.copy(mat.userData.baseColor).multiplyScalar(dimScalar);
-                        mat.color.lerp(TAPE_TMP_COLOR, TAPE_HIGHLIGHT.colorLerp);
+                        mat.color.lerp(TAPE_TMP_COLOR, highlightColorLerpFactor);
                     }
                 } else {
-                    mat.color.lerp(mat.userData.baseColor, TAPE_HIGHLIGHT.colorLerp);
+                    mat.color.lerp(mat.userData.baseColor, highlightColorLerpFactor);
                 }
             }
 
@@ -1964,7 +1981,7 @@ function animate() {
                 const targetEmissive = hasFocusCandidate
                     ? (baseEmissive + (highlighted ? TAPE_HIGHLIGHT.emissiveBoost : 0))
                     : baseEmissive;
-                mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, targetEmissive, TAPE_HIGHLIGHT.emissiveLerp);
+                mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, targetEmissive, highlightEmissiveLerpFactor);
             }
         });
     });
@@ -1981,8 +1998,8 @@ function animate() {
         const targetRotX = isHoveredTape ? -mouse.y * 0.15 : 0;
         const targetRotY = isHoveredTape ? mouse.x * 0.20 : 0;
 
-        tape.rotation.x = THREE.MathUtils.lerp(tape.rotation.x, targetRotX, 0.1);
-        tape.rotation.y = THREE.MathUtils.lerp(tape.rotation.y, targetRotY, 0.1);
+        tape.rotation.x = THREE.MathUtils.lerp(tape.rotation.x, targetRotX, tapeRotationLerpFactor);
+        tape.rotation.y = THREE.MathUtils.lerp(tape.rotation.y, targetRotY, tapeRotationLerpFactor);
     });
     
     
@@ -2016,9 +2033,9 @@ function animate() {
     const targetY = THREE.MathUtils.lerp(POS_START.y, POS_END.y, state.zoom);
     const targetZ = THREE.MathUtils.lerp(POS_START.z, POS_END.z, state.zoom);
 
-    camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetX, 0.04);
-    camera.position.y = THREE.MathUtils.lerp(camera.position.y, targetY, 0.04);
-    camera.position.z = THREE.MathUtils.lerp(camera.position.z, targetZ, 0.04);
+    camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetX, cameraLerpFactor);
+    camera.position.y = THREE.MathUtils.lerp(camera.position.y, targetY, cameraLerpFactor);
+    camera.position.z = THREE.MathUtils.lerp(camera.position.z, targetZ, cameraLerpFactor);
     camera.lookAt(0, 0.8, -10);
 
     // 4. SCRUB THE BACKGROUND SEQUENCE USING ACTUAL CAMERA TRAVEL
@@ -2070,7 +2087,7 @@ function animate() {
                     SEQUENCE_TIMELINE.animEndFrame,
                     cameraTravel
                 );
-                sequenceTimelineFrame = THREE.MathUtils.lerp(sequenceTimelineFrame, transitionTarget, 0.2);
+                sequenceTimelineFrame = THREE.MathUtils.lerp(sequenceTimelineFrame, transitionTarget, sequenceTransitionLerpFactor);
             } else {
                 // Fully zoomed out: loop the idle segment that now starts after power-on.
                 if (sequenceTimelineFrame > loopBoundary) {
