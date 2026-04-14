@@ -294,6 +294,52 @@ body {
     margin-left: 32px;
 }
 
+#tape-category-filter {
+    position: fixed;
+    top: 16%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 65;
+    opacity: 0;
+    pointer-events: none;
+    display: flex;
+    gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid rgba(var(--crt-green-rgb), 0.45);
+    background: rgba(1, 8, 6, 0.72);
+    box-shadow: inset 0 0 0 1px rgba(var(--crt-green-rgb), 0.2);
+    transition: opacity 0.24s ease;
+    backdrop-filter: blur(3px);
+}
+
+#tape-category-filter.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.tape-category-btn {
+    border: 1px solid rgba(var(--crt-green-rgb), 0.45);
+    background: rgba(0, 0, 0, 0.25);
+    color: rgba(var(--crt-green-rgb), 0.9);
+    font-family: 'VT323', monospace;
+    font-size: 1.15rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 0.32rem 0.72rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+}
+
+.tape-category-btn:hover {
+    background: rgba(var(--crt-green-rgb), 0.2);
+}
+
+.tape-category-btn.active {
+    color: #021007;
+    background: rgba(var(--crt-green-rgb), 0.9);
+    box-shadow: 0 0 10px rgba(var(--crt-green-rgb), 0.5);
+}
+
 /* ========================================== */
 /* 7. ANIMATIONS & UTILITIES                  */
 /* ========================================== */
@@ -612,6 +658,20 @@ body {
         box-shadow: 0 0 12px rgba(var(--crt-green-rgb), 0.25);
     }
 
+    #tape-category-filter {
+        top: 11%;
+        width: min(92vw, 760px);
+        justify-content: center;
+        gap: 8px;
+        padding: 8px;
+        flex-wrap: wrap;
+    }
+
+    .tape-category-btn {
+        font-size: 1.05rem;
+        padding: 0.26rem 0.62rem;
+    }
+
     #tape-hover-ui .hud-line {
         justify-content: center;
         text-align: center;
@@ -700,6 +760,19 @@ body {
 
     #copyFeedback {
         font-size: 1rem;
+    }
+
+    #tape-category-filter {
+        top: 9%;
+        width: min(94vw, 420px);
+        gap: 6px;
+        padding: 6px;
+    }
+
+    .tape-category-btn {
+        font-size: 0.92rem;
+        letter-spacing: 0.04em;
+        padding: 0.22rem 0.5rem;
     }
 
     #tape-hover-ui {
