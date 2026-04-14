@@ -53,6 +53,16 @@ const tapes = [];
 const numTapes = projectData.length;
 const tapeSpacing = 0.55;
 const initialCenter = numTapes > 0 ? Math.min(cachedConfig.radius, (numTapes - 1) / 2) : 0;
+const CATEGORY_ALL_KEY = '__ALL__';
+const categoryFilterBar = document.getElementById('tape-category-filter');
+const categoryValues = Array.from(new Set(
+    projectData
+        .map((entry) => (typeof entry?.category === 'string' ? entry.category : ''))
+        .filter(Boolean)
+));
+let activeCategory = CATEGORY_ALL_KEY;
+let filteredTapeIndices = [];
+const filteredOrderByTapeIndex = new Map();
 
 const state = {
     zoom: 0,
@@ -67,6 +77,165 @@ const state = {
     minDist: 999
 };
 let touchFocusedTape = null;
+
+function formatCategoryLabel(category) {
+    if (category === CATEGORY_ALL_KEY) return 'ALL';
+    return String(category).replace(/_/g, ' ').toUpperCase();
+}
+
+function categoryMatchesProject(projectInfo, category = activeCategory) {
+    if (category === CATEGORY_ALL_KEY) return true;
+    return projectInfo?.category === category;
+}
+
+function rebuildFilteredTapeLookup() {
+    filteredTapeIndices = [];
+    filteredOrderByTapeIndex.clear();
+
+    projectData.forEach((projectInfo, tapeIndex) => {
+        if (!categoryMatchesProject(projectInfo)) return;
+        filteredOrderByTapeIndex.set(tapeIndex, filteredTapeIndices.length);
+        filteredTapeIndices.push(tapeIndex);
+    });
+}
+
+function getTapeScrollBounds() {
+    const filteredCount = filteredTapeIndices.length;
+    if (filteredCount <= 0) {
+        return { min: 0, max: 0 };
+    }
+
+    const { radius, count } = cachedConfig;
+    if (filteredCount <= count) {
+        return { min: 0, max: filteredCount - 1 };
+    }
+
+    return {
+        min: radius,
+        max: filteredCount - 1 - radius
+    };
+}
+
+function getInitialFilteredScroll() {
+    if (filteredTapeIndices.length <= 0) return 0;
+
+    const { radius, count } = cachedConfig;
+    if (filteredTapeIndices.length > count) {
+        // Start at the first full window: 0..(count-1), with radius as center.
+        return radius;
+    }
+
+    return (filteredTapeIndices.length - 1) / 2;
+}
+
+function getTapeIndexFromScroll(scrollValue) {
+    if (filteredTapeIndices.length === 0) return null;
+    const order = THREE.MathUtils.clamp(Math.round(scrollValue), 0, filteredTapeIndices.length - 1);
+    return filteredTapeIndices[order] ?? null;
+}
+
+function getScrollForTapeIndex(tapeIndex, { clampToBounds = true } = {}) {
+    const filteredOrder = filteredOrderByTapeIndex.get(tapeIndex);
+    if (typeof filteredOrder !== 'number') return null;
+    return clampToBounds ? clampTapeTargetScroll(filteredOrder) : filteredOrder;
+}
+
+function syncCategoryButtonsActiveState() {
+    if (!categoryFilterBar) return;
+
+    const categoryButtons = categoryFilterBar.querySelectorAll('.tape-category-btn');
+    categoryButtons.forEach((button) => {
+        const isActive = button.getAttribute('data-category') === activeCategory;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+}
+
+function setActiveCategory(nextCategory, { playUiSound = true } = {}) {
+    if (state.isLocked) return;
+
+    const normalizedCategory = nextCategory === CATEGORY_ALL_KEY || categoryValues.includes(nextCategory)
+        ? nextCategory
+        : CATEGORY_ALL_KEY;
+
+    if (normalizedCategory === activeCategory) return;
+
+    activeCategory = normalizedCategory;
+    rebuildFilteredTapeLookup();
+
+// Reset outgoing tapes so filter transitions don't show split-second flip artifacts.
+    tapes.forEach((tape) => {
+        const isInNextCategory = filteredOrderByTapeIndex.has(tape.userData?.index);
+        if (isInNextCategory) {
+            tape.position.z = 0;
+            return;
+        }
+
+        // --- THE FIX: Instantly hide and push back! ---
+        tape.userData.filterBlend = 0; 
+        tape.position.z = -FILTER_HIDE_LIFT_Z;
+        // ----------------------------------------------
+
+        const hov = tape.userData?.action1;
+        const flip = tape.userData?.action2;
+        if (hov) {
+            hov.stop();
+            hov.reset();
+        }
+        if (flip) {
+            flip.stop();
+            flip.reset();
+        }
+
+        tape.rotation.set(0, 0, 0);
+    });
+    const nextScroll = getInitialFilteredScroll();
+
+    state.currentScroll = nextScroll;
+    state.targetScroll = nextScroll;
+
+    state.activeTape = null;
+    state.previousTape = null;
+    touchFocusedTape = null;
+    if (state.selectedTape && !filteredOrderByTapeIndex.has(state.selectedTape.userData?.index)) {
+        state.selectedTape = null;
+    }
+
+    const hoverUI = document.getElementById('tape-hover-ui');
+    if (hoverUI) {
+        hoverUI.classList.remove('visible');
+    }
+
+    syncCategoryButtonsActiveState();
+    if (playUiSound) {
+        playTapeUiSfx();
+    }
+}
+
+function buildCategoryFilterUi() {
+    if (!categoryFilterBar) return;
+
+    const categories = [CATEGORY_ALL_KEY, ...categoryValues];
+    categoryFilterBar.innerHTML = categories.map((category) => {
+        const label = formatCategoryLabel(category);
+        const isActive = category === activeCategory;
+        return `<button type="button" class="tape-category-btn${isActive ? ' active' : ''}" data-category="${category}" aria-pressed="${isActive ? 'true' : 'false'}">${label}</button>`;
+    }).join('');
+
+    categoryFilterBar.addEventListener('click', (event) => {
+        const button = event.target.closest('.tape-category-btn');
+        if (!button || !categoryFilterBar.contains(button)) return;
+
+        const requestedCategory = button.getAttribute('data-category') || CATEGORY_ALL_KEY;
+        setActiveCategory(requestedCategory);
+    });
+}
+
+rebuildFilteredTapeLookup();
+buildCategoryFilterUi();
+const initialFilteredScroll = getInitialFilteredScroll();
+state.currentScroll = initialFilteredScroll;
+state.targetScroll = initialFilteredScroll;
 
 let swooshSfx = null;
 let swooshPrimed = false;
@@ -377,6 +546,35 @@ const LOCK_CENTER_EPSILON = 0.02;
 const LOCK_CENTER_MAX_WAIT_MS = 1000;
 const LOCK_CENTER_POLL_MS = 16;
 
+function waitForLockedCenter({ tape, targetScroll, onReady }) {
+    if (!tape || typeof onReady !== 'function') return;
+    if (typeof targetScroll !== 'number') {
+        onReady();
+        return;
+    }
+
+    const startedAt = performance.now();
+
+    const pollCenter = () => {
+        if (!state.isLocked || state.selectedTape !== tape) return;
+
+        const scrollError = Math.abs(state.currentScroll - targetScroll);
+        if (scrollError <= LOCK_CENTER_EPSILON) {
+            onReady();
+            return;
+        }
+
+        if (performance.now() - startedAt >= LOCK_CENTER_MAX_WAIT_MS) {
+            onReady();
+            return;
+        }
+
+        setTimeout(pollCenter, LOCK_CENTER_POLL_MS);
+    };
+
+    pollCenter();
+}
+
 function clearProjectTransitionTimers() {
     if (projectOpenTimeoutId) {
         clearTimeout(projectOpenTimeoutId);
@@ -440,6 +638,14 @@ const TAPE_HIGHLIGHT = {
 };
 const TAPE_HIGHLIGHT_COLOR = new THREE.Color(0xffffff);
 const TAPE_TMP_COLOR = new THREE.Color();
+const FILTER_HIDE_LIFT_Z = 1.25;
+const FILTER_BLEND_SPEED = 0.2;
+const FILTER_RENDER_EPSILON = 0.02;
+const FILTER_OUT_RENDER_EPSILON = 0.08;
+const FILTER_OUT_OPACITY_EXPONENT = 2.0;
+const FILTER_OUT_INITIAL_Z_OFFSET = -0.35;
+const HOVER_FALLBACK_MAX_DIST_X = 0.2;
+const HOVER_FALLBACK_MAX_DIST_Y = 0.4;
 
 
 // --- 2. SEQUENCE BACKGROUND SETUP ---
@@ -1011,6 +1217,12 @@ function getTapeRootFromObject(object3D) {
     return null;
 }
 
+function isTapeInteractable(tape) {
+    if (!tape || !tape.userData) return false;
+    if (!tape.visible) return false;
+    return typeof tape.userData.filteredOrder === 'number' && tape.userData.filteredOrder >= 0;
+}
+
 function getTapeAtClientPosition(clientX, clientY) {
     if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
     if (state.zoom <= 0.9) return null;
@@ -1022,7 +1234,14 @@ function getTapeAtClientPosition(clientX, clientY) {
     const hits = raycaster.intersectObjects(tapes, true);
     if (hits.length === 0) return null;
 
-    return getTapeRootFromObject(hits[0].object);
+    for (const hit of hits) {
+        const tapeRoot = getTapeRootFromObject(hit.object);
+        if (isTapeInteractable(tapeRoot)) {
+            return tapeRoot;
+        }
+    }
+
+    return null;
 }
 
 // --- 5. LOAD MODELS & LOADING SCREEN ---
@@ -1200,6 +1419,8 @@ tapeLoader.load("models/tape.glb", gltf => {
             action1: action1,
             action2: action2,
             projectInfo: projectData[i],
+            filteredOrder: -1,
+            filterBlend: 1,
             highlightMats: []
         };
 
@@ -1463,8 +1684,8 @@ const dragState = {
 };
 
 function clampTapeTargetScroll(value) {
-    const { radius } = cachedConfig;
-    return THREE.MathUtils.clamp(value, radius, numTapes - 1 - radius);
+    const { min, max } = getTapeScrollBounds();
+    return THREE.MathUtils.clamp(value, min, max);
 }
 
 function canStartTapeDrag() {
@@ -1562,10 +1783,10 @@ window.addEventListener('pointerup', onTapeDragEnd);
 window.addEventListener('pointercancel', onTapeDragEnd);
 
 function applyWheelNavigation(deltaY) {
-    const { radius } = cachedConfig;
+    const { min, max } = getTapeScrollBounds();
     const now = performance.now();
     const zoomSettledIn = state.zoom >= ZOOM_SCROLL_READY;
-    const atFirstTape = state.targetScroll <= radius + 0.001;
+    const atFirstTape = state.targetScroll <= min + 0.001;
 
     if (deltaY > 5) {
         // Don't advance tape index until the camera has mostly finished zooming in.
@@ -1578,8 +1799,8 @@ function applyWheelNavigation(deltaY) {
             return;
         } else if (!zoomSettledIn) {
             return;
-        } else if (state.targetScroll < numTapes - 1 - radius) {
-            state.targetScroll++;
+        } else if (state.targetScroll < max - 0.001) {
+            state.targetScroll = clampTapeTargetScroll(state.targetScroll + 1);
             playTapeUiSfx();
         }
     } else if (deltaY < -5) {
@@ -1590,8 +1811,8 @@ function applyWheelNavigation(deltaY) {
             return;
         }
 
-        if (state.targetScroll > radius) {
-            state.targetScroll--;
+        if (state.targetScroll > min + 0.001) {
+            state.targetScroll = clampTapeTargetScroll(state.targetScroll - 1);
             playTapeUiSfx();
             zoomOutIntent = 0;
         } else {
@@ -1708,6 +1929,7 @@ window.addEventListener("resize", () => {
 
     cachedConfig = getVisibleConfig();
     state.targetScroll = clampTapeTargetScroll(state.targetScroll);
+    state.currentScroll = clampTapeTargetScroll(state.currentScroll);
 });
 
 window.addEventListener('click', (event) => {
@@ -1716,13 +1938,14 @@ window.addEventListener('click', (event) => {
 
     if (state.zoom > 0.9 && !state.isLocked) {
         const clickedTape = getTapeAtClientPosition(event.clientX, event.clientY) || state.activeTape;
-        if (!clickedTape) return;
+        if (!isTapeInteractable(clickedTape)) return;
 
         if (isCoarsePointerDevice && touchFocusedTape !== clickedTape) {
             // On touch devices: first tap focuses/hovers, second tap inserts.
             touchFocusedTape = clickedTape;
             state.scrollSpeed = LOCK_FOCUS_SCROLL_SPEED;
-            state.targetScroll = clampTapeTargetScroll(clickedTape.userData.index);
+            const focusScroll = getScrollForTapeIndex(clickedTape.userData.index, { clampToBounds: false });
+            state.targetScroll = focusScroll ?? state.targetScroll;
             if (state.previousTape === clickedTape) {
                 // Force hover branch to run so first tap replays hover animation/UI.
                 state.previousTape = null;
@@ -1739,36 +1962,48 @@ window.addEventListener('click', (event) => {
         // Use the smooth glide speed
         state.scrollSpeed = LOCK_CENTER_SCROLL_SPEED; 
         state.selectedTape = clickedTape;
-        state.targetScroll = clickedTape.userData.index;
+        const selectedScroll = getScrollForTapeIndex(clickedTape.userData.index, { clampToBounds: false });
+        state.targetScroll = selectedScroll ?? state.targetScroll;
+
+        const lockStartedAt = performance.now();
 
         // Keep the fix that instantly straightens the tape!
         clickedTape.rotation.set(0, 0, 0);
 
-        projectOpenTimeoutId = setTimeout(() => {
-            projectOpenTimeoutId = null;
-            const selected = state.selectedTape;
-            if (!selected) return;
-            const selectedProjectData = selected.userData.projectInfo;
-            openProjectPage(selectedProjectData);
-        }, 1500); 
-        
-        const hov = clickedTape.userData.action1;
-        const flip = clickedTape.userData.action2;
+        waitForLockedCenter({
+            tape: clickedTape,
+            targetScroll: selectedScroll,
+            onReady: () => {
+                if (!state.isLocked || state.selectedTape !== clickedTape) return;
 
-        // RESTORED: The classic, snappy 400ms timing with no weird math delays!
-        flipTimeoutId = setTimeout(() => {
-            flipTimeoutId = null;
-            if (flip) {
-                if (hov) hov.stop();
-                flip.reset();
-                flip.setEffectiveWeight(1.0);
-                flip.play();
-                zoomOutTimeoutId = setTimeout(() => {
-                    zoomOutTimeoutId = null;
-                    state.targetZoom = 0;
-                }, 500);
+                const elapsed = performance.now() - lockStartedAt;
+                const hov = clickedTape.userData.action1;
+                const flip = clickedTape.userData.action2;
+
+                // Keep original pacing as closely as possible relative to initial click time.
+                flipTimeoutId = setTimeout(() => {
+                    flipTimeoutId = null;
+                    if (flip) {
+                        if (hov) hov.stop();
+                        flip.reset();
+                        flip.setEffectiveWeight(1.0);
+                        flip.play();
+                        zoomOutTimeoutId = setTimeout(() => {
+                            zoomOutTimeoutId = null;
+                            state.targetZoom = 0;
+                        }, 500);
+                    }
+                }, Math.max(0, 400 - elapsed));
+
+                projectOpenTimeoutId = setTimeout(() => {
+                    projectOpenTimeoutId = null;
+                    const selected = state.selectedTape;
+                    if (!selected) return;
+                    const selectedProjectData = selected.userData.projectInfo;
+                    openProjectPage(selectedProjectData);
+                }, Math.max(0, 1500 - elapsed));
             }
-        }, 400);
+        });
     }
 });
 
@@ -1876,6 +2111,15 @@ function animate() {
         }
     }
 
+    if (categoryFilterBar) {
+        const shouldShowCategoryFilter = activeSequenceKey === 'default'
+            && defaultPowerOnPlayed
+            && state.zoom > 0.68
+            && state.targetZoom > 0.62
+            && categoryValues.length > 0;
+        categoryFilterBar.classList.toggle('visible', shouldShowCategoryFilter);
+    }
+
     // 3. APPLY DEFERRED SEQUENCE
     // Only switch to About/Contact once the zoom-out animation has settled completely.
     if (pendingSectionSequenceKey && state.targetZoom === 0 && state.zoom < 0.03) {
@@ -1886,21 +2130,65 @@ function animate() {
     // 4. SCROLL TAPES
     state.currentScroll = THREE.MathUtils.lerp(state.currentScroll, state.targetScroll, scrollLerpFactor);
 
-    const { radius } = cachedConfig; 
+    const { radius } = cachedConfig;
     const center = Math.round(state.currentScroll);
     const visibleTapes = [];
 
     let currentFrameActiveTape = null;
     let currentFrameMinDist = 999;
 
-    tapes.forEach((tape, i) => {
-        tape.visible = i >= center - radius && i <= center + radius;
-        if (tape.visible && tape.userData.mixer) tape.userData.mixer.update(delta);
-        if (!tape.visible) return;
-        visibleTapes.push(tape);
+    tapes.forEach((tape) => {
+        const filteredOrder = filteredOrderByTapeIndex.get(tape.userData.index);
+        tape.userData.filteredOrder = typeof filteredOrder === 'number' ? filteredOrder : -1;
 
-        tape.position.x = (i - state.currentScroll) * tapeSpacing;
+        const isInFilteredCategory = tape.userData.filteredOrder >= 0;
+        const isInWindow = isInFilteredCategory
+            && tape.userData.filteredOrder >= center - radius
+            && tape.userData.filteredOrder <= center + radius;
 
+        const filterLerpFactor = getFrameRateIndependentLerpFactor(FILTER_BLEND_SPEED, delta);
+        const targetFilterBlend = isInFilteredCategory ? 1 : 0;
+        tape.userData.filterBlend = THREE.MathUtils.lerp(tape.userData.filterBlend, targetFilterBlend, filterLerpFactor);
+        if (Math.abs(tape.userData.filterBlend - targetFilterBlend) < 0.002) {
+            tape.userData.filterBlend = targetFilterBlend;
+        }
+
+        const filterBlend = THREE.MathUtils.clamp(tape.userData.filterBlend, 0, 1);
+        const shouldRenderTape = isInWindow || (!isInFilteredCategory && filterBlend > FILTER_OUT_RENDER_EPSILON);
+        tape.visible = shouldRenderTape;
+        if (!shouldRenderTape) return;
+
+        if (isInFilteredCategory) {
+            tape.position.x = (tape.userData.filteredOrder - state.currentScroll) * tapeSpacing;
+            if (tape.userData.mixer) tape.userData.mixer.update(delta);
+            visibleTapes.push(tape);
+        }
+
+    tape.position.y = 0.4;
+        
+        // Slide the tape backward into the darkness
+        const targetZ = -(1 - filterBlend) * FILTER_HIDE_LIFT_Z;
+        tape.position.z = THREE.MathUtils.lerp(tape.position.z, targetZ, filterLerpFactor);
+        
+        // --- THE NEW FIX ---
+        // Physically scale the tape down instead of making it transparent!
+        // This avoids all 3D glass/hollow glitches completely.
+        const scaleVal = Math.max(0.001, filterBlend); 
+        tape.scale.set(scaleVal, scaleVal, scaleVal);
+
+        const mats = tape.userData.highlightMats || [];
+        mats.forEach((mat) => {
+            if (!mat) return;
+            
+            // Lock the material so it is PERMANENTLY solid and opaque. 
+            // No more weird x-ray ghost tapes!
+            if (mat.transparent !== false) {
+                mat.transparent = false;
+                mat.opacity = 1.0;
+                mat.depthWrite = true;
+                mat.needsUpdate = true;
+            }
+        });
         if (state.zoom > 0.9 && !hoverSuppressed) {
             tape.getWorldPosition(tempVec);
             tempVec.project(camera);
@@ -1908,7 +2196,9 @@ function animate() {
             const distX = Math.abs(mouse.x - tempVec.x);
             const distY = Math.abs(mouse.y - tempVec.y);
 
-            if (distY < 0.4 && distX < currentFrameMinDist) {
+            if (distY < HOVER_FALLBACK_MAX_DIST_Y
+                && distX < HOVER_FALLBACK_MAX_DIST_X
+                && distX < currentFrameMinDist) {
                 currentFrameMinDist = distX;
                 currentFrameActiveTape = tape;
             }
@@ -1930,11 +2220,11 @@ function animate() {
         if (state.zoom <= 0.9 || state.isLocked || hoverSuppressed) {
             touchFocusedTape = null;
             nextActiveTape = null;
-        } else if (touchFocusedTape && touchFocusedTape.visible) {
+        } else if (isTapeInteractable(touchFocusedTape)) {
             nextActiveTape = touchFocusedTape;
         } else {
             // On phone, only intentional tap-focus should activate hover/description.
-            if (touchFocusedTape && !touchFocusedTape.visible) {
+            if (touchFocusedTape && !isTapeInteractable(touchFocusedTape)) {
                 touchFocusedTape = null;
             }
             nextActiveTape = null;
@@ -1948,12 +2238,14 @@ function animate() {
     const selectedFocusTape = (state.selectedTape && state.selectedTape.visible) ? state.selectedTape : null;
     const focusTape = selectedFocusTape || hoverFocusTape;
     const hasFocusCandidate = !!focusTape && focusTape.visible;
-    const focusIndex = hasFocusCandidate ? focusTape.userData.index : -1;
+    const focusOrder = hasFocusCandidate ? focusTape.userData.filteredOrder : -1;
 
     // Lightweight hover highlight (no extra render pass): focused tape bright, others dim.
     tapes.forEach((tape) => {
-        const highlighted = hasFocusCandidate && tape.userData.index === focusIndex;
-        const indexDistance = hasFocusCandidate ? Math.abs(tape.userData.index - focusIndex) : 0;
+        const highlighted = hasFocusCandidate && tape === focusTape;
+        const indexDistance = hasFocusCandidate && tape.userData.filteredOrder >= 0 && focusOrder >= 0
+            ? Math.abs(tape.userData.filteredOrder - focusOrder)
+            : 0;
         const normalizedDistance = THREE.MathUtils.clamp(indexDistance / TAPE_HIGHLIGHT.dimRange, 0, 1);
         const dimProgress = THREE.MathUtils.smoothstep(normalizedDistance, 0, 1);
         const dimScalar = THREE.MathUtils.lerp(1, TAPE_HIGHLIGHT.dimOthers, dimProgress);
@@ -1990,6 +2282,7 @@ function animate() {
 
     tapes.forEach((tape) => {
         if (!tape.visible) return;
+        if (tape.userData.filteredOrder < 0) return;
 
         // Keep clicked/selected tape animation untouched.
         if (state.selectedTape === tape) return;
