@@ -55,6 +55,11 @@ const tapeSpacing = 0.55;
 const initialCenter = numTapes > 0 ? Math.min(cachedConfig.radius, (numTapes - 1) / 2) : 0;
 const CATEGORY_ALL_KEY = '__ALL__';
 const categoryFilterBar = document.getElementById('tape-category-filter');
+const hoverUI = document.getElementById('tape-hover-ui');
+const hoverTitleEl = document.getElementById('hover-title');
+const hoverCategoryEl = document.getElementById('hover-category');
+const hoverDescEl = document.getElementById('hover-desc');
+const tapePreviewStripEl = document.getElementById('tape-preview-strip');
 const categoryValues = Array.from(new Set(
     projectData
         .map((entry) => (typeof entry?.category === 'string' ? entry.category : ''))
@@ -63,6 +68,19 @@ const categoryValues = Array.from(new Set(
 let activeCategory = CATEGORY_ALL_KEY;
 let filteredTapeIndices = [];
 const filteredOrderByTapeIndex = new Map();
+let lastPointerClientX = Number.isFinite(window.innerWidth) ? window.innerWidth * 0.5 : 0;
+let lastPointerClientY = Number.isFinite(window.innerHeight) ? window.innerHeight * 0.5 : 0;
+const CATEGORY_SWITCH_HOVER_SUPPRESS_MS = 260;
+const CATEGORY_SWITCH_HOVER_REARM_DISTANCE_PX = 12;
+const categoryHoverGuard = {
+    suppressUntil: 0,
+    awaitingRearm: false,
+    anchorX: 0,
+    anchorY: 0
+};
+const TAPE_PREVIEW_MAX_IMAGES = 3;
+const tapePreviewCache = new Map();
+let tapePreviewRequestToken = 0;
 
 const state = {
     zoom: 0,
@@ -151,6 +169,131 @@ function syncCategoryButtonsActiveState() {
     });
 }
 
+function clearTapePreviewUi() {
+    tapePreviewRequestToken += 1;
+    if (!tapePreviewStripEl) return;
+    tapePreviewStripEl.replaceChildren();
+}
+
+function renderTapePreviewStatus(className, text) {
+    if (!tapePreviewStripEl) return;
+
+    const status = document.createElement('span');
+    status.className = className;
+    status.textContent = text;
+    tapePreviewStripEl.replaceChildren(status);
+}
+
+function renderTapePreviewImages(imageUrls) {
+    if (!tapePreviewStripEl) return;
+
+    const validUrls = Array.isArray(imageUrls)
+        ? imageUrls.filter((src) => typeof src === 'string' && src.trim().length > 0)
+        : [];
+
+    if (validUrls.length <= 0) {
+        renderTapePreviewStatus('tape-preview-empty', 'NO PREVIEW IMAGES FOUND');
+        return;
+    }
+
+    const previewNodes = validUrls.slice(0, TAPE_PREVIEW_MAX_IMAGES).map((src, index) => {
+        const frame = document.createElement('figure');
+        frame.className = 'tape-preview-thumb';
+
+        const img = document.createElement('img');
+        img.src = src;
+        img.alt = `Preview ${index + 1}`;
+        img.loading = 'lazy';
+        img.decoding = 'async';
+
+        frame.appendChild(img);
+        return frame;
+    });
+
+    tapePreviewStripEl.replaceChildren(...previewNodes);
+}
+
+function extractPreviewImageUrlsFromPage(htmlText, pageUrl) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlText, 'text/html');
+    const imageEls = Array.from(doc.querySelectorAll('img[src]'));
+    const uniqueUrls = [];
+
+    imageEls.forEach((imageEl) => {
+        if (uniqueUrls.length >= TAPE_PREVIEW_MAX_IMAGES) return;
+
+        const rawSrc = imageEl.getAttribute('src');
+        if (!rawSrc || rawSrc.startsWith('data:')) return;
+
+        try {
+            const resolvedUrl = new URL(rawSrc, pageUrl).href;
+            if (!uniqueUrls.includes(resolvedUrl)) {
+                uniqueUrls.push(resolvedUrl);
+            }
+        } catch {
+            // Ignore malformed image paths in project pages.
+        }
+    });
+
+    return uniqueUrls;
+}
+
+async function getProjectPreviewImages(projectUrl) {
+    if (!projectUrl || typeof projectUrl !== 'string') return [];
+
+    let pageUrl;
+    try {
+        pageUrl = new URL(projectUrl, window.location.href);
+    } catch {
+        return [];
+    }
+
+    const cacheKey = pageUrl.href;
+    if (tapePreviewCache.has(cacheKey)) {
+        return tapePreviewCache.get(cacheKey);
+    }
+
+    const requestPromise = fetch(cacheKey, { cache: 'force-cache' })
+        .then((response) => {
+            if (!response.ok) return '';
+            return response.text();
+        })
+        .then((htmlText) => {
+            if (!htmlText) return [];
+            return extractPreviewImageUrlsFromPage(htmlText, pageUrl);
+        })
+        .catch(() => []);
+
+    tapePreviewCache.set(cacheKey, requestPromise);
+    return requestPromise;
+}
+
+async function showTapePreviewForProject(projectInfo) {
+    if (!tapePreviewStripEl) return;
+
+    const nextToken = tapePreviewRequestToken + 1;
+    tapePreviewRequestToken = nextToken;
+    renderTapePreviewStatus('tape-preview-loading', 'SCANNING PROJECT FOLDER...');
+
+    const imageUrls = await getProjectPreviewImages(projectInfo?.url);
+    if (nextToken !== tapePreviewRequestToken) return;
+
+    renderTapePreviewImages(imageUrls);
+}
+
+function armCategoryHoverGuard() {
+    categoryHoverGuard.suppressUntil = performance.now() + CATEGORY_SWITCH_HOVER_SUPPRESS_MS;
+
+    if (isCoarsePointerDevice) {
+        categoryHoverGuard.awaitingRearm = false;
+        return;
+    }
+
+    categoryHoverGuard.awaitingRearm = true;
+    categoryHoverGuard.anchorX = lastPointerClientX;
+    categoryHoverGuard.anchorY = lastPointerClientY;
+}
+
 function setActiveCategory(nextCategory, { playUiSound = true } = {}) {
     if (state.isLocked) return;
 
@@ -171,10 +314,10 @@ function setActiveCategory(nextCategory, { playUiSound = true } = {}) {
             return;
         }
 
-        // --- THE FIX: Instantly hide and push back! ---
+        // Instantly hide and park above the lane so re-entry animates downward.
         tape.userData.filterBlend = 0; 
-        tape.position.z = -FILTER_HIDE_LIFT_Z;
-        // ----------------------------------------------
+        tape.position.y = 0.4 + FILTER_HIDE_LIFT_Y;
+        tape.position.z = 0;
 
         const hov = tape.userData?.action1;
         const flip = tape.userData?.action2;
@@ -201,10 +344,11 @@ function setActiveCategory(nextCategory, { playUiSound = true } = {}) {
         state.selectedTape = null;
     }
 
-    const hoverUI = document.getElementById('tape-hover-ui');
     if (hoverUI) {
         hoverUI.classList.remove('visible');
     }
+    clearTapePreviewUi();
+    armCategoryHoverGuard();
 
     syncCategoryButtonsActiveState();
     if (playUiSound) {
@@ -638,12 +782,11 @@ const TAPE_HIGHLIGHT = {
 };
 const TAPE_HIGHLIGHT_COLOR = new THREE.Color(0xffffff);
 const TAPE_TMP_COLOR = new THREE.Color();
-const FILTER_HIDE_LIFT_Z = 1.25;
-const FILTER_BLEND_SPEED = 0.2;
+const FILTER_HIDE_LIFT_Y = 1.25;
+const FILTER_BLEND_SPEED = 0.12;
 const FILTER_RENDER_EPSILON = 0.02;
 const FILTER_OUT_RENDER_EPSILON = 0.08;
 const FILTER_OUT_OPACITY_EXPONENT = 2.0;
-const FILTER_OUT_INITIAL_Z_OFFSET = -0.35;
 const HOVER_FALLBACK_MAX_DIST_X = 0.2;
 const HOVER_FALLBACK_MAX_DIST_Y = 0.4;
 
@@ -698,10 +841,10 @@ const SECTION_PLAYBACK = {
 };
 
 const SEQUENCE_BLEND = {
-    zoomStart: 0.72,
-    zoomFull: 0.92,
-    radiusNdc: 0.13,
-    softness: 0.72,
+    zoomStart: 0.70,
+    zoomFull: 0.90,
+    radiusNdc: 0.1,
+    softness: 0.70,
     maxAlpha: 0.95
 };
 
@@ -841,7 +984,9 @@ function activateDefaultSequence({ playPowerOn = true, resetFrame = true, forceR
 }
 
 function queueMenuActionThroughPowerOn(action) {
-    pendingMenuAction = action;
+    // Returning "home" from section pages only needs one power-on pass.
+    // Keep deferred replay only for actions that need a post-intro step (e.g. "projects").
+    pendingMenuAction = action === 'home' ? null : action;
     pendingScrollDelta = 0;
     pendingSectionSequenceKey = null;
     activateDefaultSequence({ playPowerOn: true, resetFrame: true });
@@ -1530,6 +1675,9 @@ function openProjectPage(data) {
 
 // --- 7. EVENTS ---
 window.addEventListener("mousemove", e => {
+    lastPointerClientX = e.clientX;
+    lastPointerClientY = e.clientY;
+
     mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
     if (!isCoarsePointerDevice) {
@@ -1542,6 +1690,17 @@ window.addEventListener("mousemove", e => {
     if (dragState.awaitingHoverRearm) {
         if (Math.abs(e.clientX - dragState.releaseX) >= DRAG_HOVER_REARM_DISTANCE_PX) {
             dragState.awaitingHoverRearm = false;
+        }
+    }
+
+    if (categoryHoverGuard.awaitingRearm) {
+        const movedDistance = Math.hypot(
+            e.clientX - categoryHoverGuard.anchorX,
+            e.clientY - categoryHoverGuard.anchorY
+        );
+
+        if (movedDistance >= CATEGORY_SWITCH_HOVER_REARM_DISTANCE_PX) {
+            categoryHoverGuard.awaitingRearm = false;
         }
     }
 });
@@ -2076,7 +2235,15 @@ function animate() {
     const sequenceTransitionLerpFactor = getFrameRateIndependentLerpFactor(0.2, delta);
     const highlightColorLerpFactor = getFrameRateIndependentLerpFactor(TAPE_HIGHLIGHT.colorLerp, delta);
     const highlightEmissiveLerpFactor = getFrameRateIndependentLerpFactor(TAPE_HIGHLIGHT.emissiveLerp, delta);
-    const hoverSuppressed = dragState.moved || dragState.awaitingHoverRearm || performance.now() < dragState.hoverSuppressUntil;
+    if (categoryHoverGuard.awaitingRearm && (isCoarsePointerDevice || state.zoom <= 0.9)) {
+        categoryHoverGuard.awaitingRearm = false;
+    }
+
+    const hoverSuppressed = dragState.moved
+        || dragState.awaitingHoverRearm
+        || performance.now() < dragState.hoverSuppressUntil
+        || categoryHoverGuard.awaitingRearm
+        || performance.now() < categoryHoverGuard.suppressUntil;
 
     // 1. SCROLL WHEEL OVERRIDE
     // If the mouse wheel pushes us towards the tapes (zoom > 0.5), force the default sequence.
@@ -2118,6 +2285,9 @@ function animate() {
             && state.targetZoom > 0.62
             && categoryValues.length > 0;
         categoryFilterBar.classList.toggle('visible', shouldShowCategoryFilter);
+
+        const shouldFadeCategoryFilter = !!state.activeTape && state.zoom > 0.9 && !state.isLocked && !hoverSuppressed;
+        categoryFilterBar.classList.toggle('hover-fade', shouldShowCategoryFilter && shouldFadeCategoryFilter);
     }
 
     // 3. APPLY DEFERRED SEQUENCE
@@ -2164,11 +2334,9 @@ function animate() {
             visibleTapes.push(tape);
         }
 
-    tape.position.y = 0.4;
-        
-        // Slide the tape backward into the darkness
-        const targetZ = -(1 - filterBlend) * FILTER_HIDE_LIFT_Z;
-        tape.position.z = THREE.MathUtils.lerp(tape.position.z, targetZ, filterLerpFactor);
+        const targetY = 0.4 + ((1 - filterBlend) * FILTER_HIDE_LIFT_Y);
+        tape.position.y = THREE.MathUtils.lerp(tape.position.y, targetY, filterLerpFactor);
+        tape.position.z = 0;
         
         // --- THE NEW FIX ---
         // Physically scale the tape down instead of making it transparent!
@@ -2298,11 +2466,11 @@ function animate() {
     
     // Hover Animation Triggers
     if (!state.isLocked && state.activeTape !== state.previousTape) {
-        const hoverUI = document.getElementById('tape-hover-ui');
         if (state.previousTape?.userData.action1) {
             const hov = state.previousTape.userData.action1;
             hov.paused = false; hov.timeScale = -1; hov.play();
             if(hoverUI) hoverUI.classList.remove('visible');
+            clearTapePreviewUi();
         }
         if (state.activeTape?.userData.action1) {
             playTapeUiSfx();
@@ -2310,10 +2478,11 @@ function animate() {
             hov.paused = false; hov.timeScale = 1; hov.play();
             const data = state.activeTape.userData.projectInfo;
             if (data && hoverUI) {
-                document.getElementById('hover-category').innerText = data.category ? data.category.toUpperCase() : "SYSTEM FILE";
-                document.getElementById('hover-title').innerText = data.title ? data.title.toUpperCase() : "UNKNOWN_DATA";
-                document.getElementById('hover-desc').innerText = data.shortDesc ? data.shortDesc : "";
+                if (hoverCategoryEl) hoverCategoryEl.innerText = data.category ? data.category.toUpperCase() : 'SYSTEM FILE';
+                if (hoverTitleEl) hoverTitleEl.innerText = data.title ? data.title.toUpperCase() : 'UNKNOWN_DATA';
+                if (hoverDescEl) hoverDescEl.innerText = data.shortDesc ? data.shortDesc : '';
                 hoverUI.classList.add('visible');
+                showTapePreviewForProject(data);
             }
         }
         state.previousTape = state.activeTape;
@@ -2448,6 +2617,10 @@ const hoverSfx = new Audio(getAudioAssetUrl('sounds/hover.wav'));
 hoverSfx.preload = 'auto';
 hoverSfx.volume = 0.28;
 
+const navHoverSfx = new Audio(getAudioAssetUrl('sounds/pencil.wav'));
+navHoverSfx.preload = 'auto';
+navHoverSfx.volume = 0.28;
+
 const tapeScrollHoverSfx = new Audio(getAudioAssetUrl('sounds/hover.wav'));
 tapeScrollHoverSfx.preload = 'auto';
 tapeScrollHoverSfx.volume = 0.48;
@@ -2512,12 +2685,27 @@ if (!window.__buttonClickSoundBound) {
     });
 }
 
-const hoverSoundSelector = 'button, .tv-hotspot, #nav-home, #nav-about, #nav-projects, #nav-contact, #nav-logo, #hotspot-email, #hotspot-linkedin';
+const navHoverSoundSelector = '#nav-home, #nav-about, #nav-projects, #nav-contact, #nav-logo';
+const hoverSoundSelector = 'button, .tv-hotspot, #hotspot-email, #hotspot-linkedin';
 if (!window.__hoverSoundBound && !isCoarsePointerDevice) {
     window.__hoverSoundBound = true;
     document.addEventListener('pointerover', (event) => {
         const targetEl = event.target instanceof Element ? event.target : null;
         if (!targetEl) return;
+
+        if (!window.__navHoverSoundBound) {
+            const currentNavHoverTarget = targetEl.closest(navHoverSoundSelector);
+            if (currentNavHoverTarget) {
+                const previousNavHoverTarget = event.relatedTarget instanceof Element
+                    ? event.relatedTarget.closest(navHoverSoundSelector)
+                    : null;
+
+                if (currentNavHoverTarget !== previousNavHoverTarget) {
+                    playSound(navHoverSfx);
+                }
+                return;
+            }
+        }
 
         const currentHoverTarget = targetEl.closest(hoverSoundSelector);
         if (!currentHoverTarget) return;

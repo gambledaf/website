@@ -57,13 +57,18 @@ body {
     -webkit-text-size-adjust: 100%;
 }
 
+body.main-page {
+    overflow-y: hidden;
+    overscroll-behavior-y: none;
+}
+
 /* ========================================== */
 /* 3. THE BACKDROP LAYERS (SCROLL ENGINE)     */
 /* ========================================== */
 
 /* Invisible track that allows the page to scroll */
 #scroll-track {
-    height: 600vh; 
+    height: 100dvh;
     width: 100%;
     pointer-events: none;
 }
@@ -315,6 +320,46 @@ body {
 #tape-category-filter.visible {
     opacity: 1;
     pointer-events: auto;
+}
+
+#tape-category-filter.hover-fade {
+    opacity: 0.08;
+    pointer-events: none;
+}
+
+.tape-preview-strip {
+    width: min(34vw, 460px);
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.tape-preview-thumb {
+    margin: 0;
+    border: 1px solid rgba(var(--crt-green-rgb), 0.45);
+    box-shadow: 0 0 9px rgba(var(--crt-green-rgb), 0.18);
+    background: rgba(0, 0, 0, 0.45);
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+}
+
+.tape-preview-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.tape-preview-loading,
+.tape-preview-empty {
+    grid-column: 1 / -1;
+    color: rgba(var(--crt-green-rgb), 0.86);
+    font-size: 0.86rem;
+    letter-spacing: 0.08em;
+    border: 1px solid rgba(var(--crt-green-rgb), 0.35);
+    background: rgba(0, 0, 0, 0.38);
+    padding: 6px 8px;
 }
 
 .tape-category-btn {
@@ -658,6 +703,11 @@ body {
         box-shadow: 0 0 12px rgba(var(--crt-green-rgb), 0.25);
     }
 
+    .tape-preview-strip {
+        width: 100%;
+        gap: 6px;
+    }
+
     #tape-category-filter {
         top: 11%;
         width: min(92vw, 760px);
@@ -779,6 +829,10 @@ body {
         bottom: 65vh;
         width: min(92vw, 420px);
         padding: 7px 8px;
+    }
+
+    .tape-preview-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 

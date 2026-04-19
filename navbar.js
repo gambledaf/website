@@ -16,9 +16,18 @@ const navClickSfx = new Audio(getAudioAssetUrl(`${basePath}sounds/button_channel
 navClickSfx.preload = 'auto';
 navClickSfx.volume = 0.5;
 
+const navHoverSfx = new Audio(getAudioAssetUrl(`${basePath}sounds/pencil.wav`));
+navHoverSfx.preload = 'auto';
+navHoverSfx.volume = 0.28;
+
 function playNavClickSound() {
     navClickSfx.currentTime = 0;
     navClickSfx.play().catch(() => {});
+}
+
+function playNavHoverSound() {
+    navHoverSfx.currentTime = 0;
+    navHoverSfx.play().catch(() => {});
 }
 
 // Basic client-side content protection: disable right-click and drag-save interactions.
@@ -284,6 +293,26 @@ if (!window.__navClickSoundBound) {
             : null;
         if (!target) return;
         playNavClickSound();
+    });
+}
+
+if (!window.__navHoverSoundBound && canHoverUI) {
+    window.__navHoverSoundBound = true;
+    const navHoverSelector = '#nav-home, #nav-about, #nav-projects, #nav-contact, #nav-logo';
+
+    document.addEventListener('pointerover', (event) => {
+        const targetEl = event.target instanceof Element ? event.target : null;
+        if (!targetEl) return;
+
+        const currentHoverTarget = targetEl.closest(navHoverSelector);
+        if (!currentHoverTarget) return;
+
+        const previousHoverTarget = event.relatedTarget instanceof Element
+            ? event.relatedTarget.closest(navHoverSelector)
+            : null;
+
+        if (currentHoverTarget === previousHoverTarget) return;
+        playNavHoverSound();
     });
 }
 
