@@ -1230,9 +1230,19 @@ function getNearestLoadedFrame(cache, sequenceConfig, targetFrame) {
     return null;
 }
 
+/* Carrying the site's version, the same as the stylesheet and the scripts do.
+   A frame keeps its name for the life of the site - 0007.webp is always
+   0007.webp - so replacing the footage leaves every browser and every cache
+   that already holds one perfectly entitled to go on serving it. That is how a
+   sequence ends up part new and part old, which is worse than being all old:
+   it reads as the animation glitching rather than as a stale file. */
 function getSequenceFramePath(sequenceConfig, frameNumber) {
     const padded = String(frameNumber).padStart(sequenceConfig.pad, '0');
-    return `${sequenceConfig.folder}/${padded}.${sequenceConfig.ext}`;
+    const path = `${sequenceConfig.folder}/${padded}.${sequenceConfig.ext}`;
+
+    return (typeof window.getVersionedAssetUrl === 'function')
+        ? window.getVersionedAssetUrl(path)
+        : path;
 }
 
 function preloadSequenceByKey(sequenceKey, shouldTrackBootProgress = false) {
