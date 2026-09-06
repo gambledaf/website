@@ -113,6 +113,10 @@ function pageHead(project) {
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Sits a directory down, so the paths step back up to the site root -->
+    <link rel="icon" href="../images/favicon-32.png" sizes="32x32" type="image/png">
+    <link rel="icon" href="../images/favicon-16.png" sizes="16x16" type="image/png">
+    <link rel="apple-touch-icon" href="../images/favicon-180.png">
     <title>ARCHIVE // ${esc(project.archiveName)}</title>
     <style>body{background:#050805}</style>
 
@@ -517,13 +521,39 @@ function previewFor(project) {
     return chosen.map(previewShot).filter(Boolean).slice(0, PREVIEW_MAX);
 }
 
+/* The one picture set into the film taped to a tape. Chosen on its own, apart
+   from the index previews: what stands for a project in a strip of six frames
+   is not always what should be the single photograph on its tape. Falls back to
+   the first thing starred for the index, so a project that has never been asked
+   the question still has an answer. */
+function filmFor(project) {
+    // The film holds a still, so footage stands as the frame it was posted at
+    const still = (shot) => shot && (shot.motion ? (shot.poster || null) : shot.src);
+
+    if (project.film) {
+        const item = previewableWorks(project)
+            .find((work) => rootUrl(work.src) === rootUrl(project.film));
+        const picked = still(item && previewShot(item));
+        if (picked) return picked;
+    }
+
+    // Otherwise the first thing the index shows, chosen by hand or worked out
+    for (const shot of previewFor(project)) {
+        const picked = still(shot);
+        if (picked) return picked;
+    }
+
+    return null;
+}
+
 function buildTapeList(projects) {
     const entries = projects.map((p) => `    {
         title: ${JSON.stringify(p.title)},
         category: ${JSON.stringify(p.category)},
         shortDesc: ${JSON.stringify(p.shortDesc)},
         url: ${JSON.stringify("filepage/" + p.slug + ".html")},
-        preview: ${JSON.stringify(previewFor(p))}
+        preview: ${JSON.stringify(previewFor(p))},
+        film: ${JSON.stringify(filmFor(p))}
     }`).join(",\n");
 
     return `// GENERATED FILE - do not edit.

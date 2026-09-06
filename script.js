@@ -1731,10 +1731,15 @@ const TAPE_BOX_TEXTURES = [
 
 const tapeLoader = new GLTFLoader(tapeManager);
 const tapeLabelLoader = new GLTFLoader(tapeManager);
+const tapeFilmLoader = new GLTFLoader(tapeManager);
 const tapeBoxTextureLoader = new THREE.TextureLoader(tapeManager);
 
 let tapeGltf = null;
 const tapeLabelGltfs = new Array(TAPE_LABEL_MODELS.length).fill(null);
+/* A strip of film stuck across the tape. One model, worn by every one of them,
+   the same as the box artwork - it is the same object each time, not a thing
+   chosen per project. */
+let tapeFilmGltf = null;
 const tapeBoxTextures = new Array(TAPE_BOX_TEXTURES.length).fill(null);
 let tapeBoxTexturesSettled = 0;
 // Redraw hooks, replayed once the handwriting font finishes loading
@@ -1993,6 +1998,280 @@ function addTapeLabelText(labelRoot, tape, text) {
     return textMesh;
 }
 
+/* --- THE PANEL ON THE FILM ----------------------------------------------
+   The film is a taped photo frame with a black window in it, and that window is
+   where a project's picture goes - not across the whole thing, which would bury
+   the paper and the tape that make it read as a photograph at all.
+
+   Where the window is gets found rather than written down, because a number
+   written here would be wrong the first time the film is exported again, and
+   wrong quietly. On the film as it stands the reading comes out at
+   { x: 0.164, y: 0.130, w: 0.685, h: 0.626 } - very nearly square.
+   Set FILM_PANEL to say it outright if the reading ever gets it wrong. */
+const FILM_PANEL = null;
+
+// Anything this dark, and solid, is a candidate for the window
+const PANEL_DARKNESS = 0.20;
+
+/* Read at this width rather than at full size. The window comes out within a
+   couple of pixels either way, and it is a fiftieth of the work. */
+const PANEL_READ_WIDTH = 512;
+
+/* How large a film is drawn. It is a decoration on the side of a tape, a
+   fraction of the screen even when a tape is close - and every tape carries its
+   own, so this is paid for once per project. */
+const FILM_TEXTURE_SIZE = 512;
+
+// Outlines whatever the reading decided, for checking it
+const FILM_PANEL_TEST = false;
+
+let filmPanel = null;
+
+/* The window is the largest single run of dark pixels, not the bounding box of
+   every dark pixel there is. The tape corners and the edges of the paper carry
+   dark specks of their own, and taken together those reach almost corner to
+   corner - asking for all of them at once gives back nearly the whole texture. */
+function readFilmPanel(image) {
+    if (FILM_PANEL) return FILM_PANEL;
+    if (filmPanel) return filmPanel;
+    if (!image) return null;
+
+    const fullW = image.width || image.naturalWidth || 0;
+    const fullH = image.height || image.naturalHeight || 0;
+    if (!fullW || !fullH) return null;
+
+    const W = Math.min(PANEL_READ_WIDTH, fullW);
+    const H = Math.max(1, Math.round(fullH * (W / fullW)));
+
+    const probe = document.createElement("canvas");
+    probe.width = W;
+    probe.height = H;
+    const ctx = probe.getContext("2d", { willReadFrequently: true });
+
+    let pixels;
+    try {
+        ctx.drawImage(image, 0, 0, W, H);
+        pixels = ctx.getImageData(0, 0, W, H).data;
+    } catch (err) {
+        // A texture the page is not allowed to read cannot be measured
+        return null;
+    }
+
+    const dark = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) {
+        const at = i * 4;
+        if (pixels[at + 3] < 200) continue;   // off the paper altogether
+        // Rec. 709, near enough for telling black from not
+        const lum = (pixels[at] * 0.2126 + pixels[at + 1] * 0.7152 + pixels[at + 2] * 0.0722) / 255;
+        if (lum <= PANEL_DARKNESS) dark[i] = 1;
+    }
+
+    const seen = new Uint8Array(W * H);
+    const stack = new Int32Array(W * H);
+    let best = null;
+
+    for (let start = 0; start < W * H; start++) {
+        if (!dark[start] || seen[start]) continue;
+
+        let top = 0;
+        stack[top++] = start;
+        seen[start] = 1;
+        let n = 0, l = W, r = -1, t = H, b = -1;
+
+        while (top) {
+            const at = stack[--top];
+            const x = at % W;
+            const y = (at / W) | 0;
+            n++;
+            if (x < l) l = x;
+            if (x > r) r = x;
+            if (y < t) t = y;
+            if (y > b) b = y;
+
+            if (x > 0 && dark[at - 1] && !seen[at - 1]) { seen[at - 1] = 1; stack[top++] = at - 1; }
+            if (x < W - 1 && dark[at + 1] && !seen[at + 1]) { seen[at + 1] = 1; stack[top++] = at + 1; }
+            if (y > 0 && dark[at - W] && !seen[at - W]) { seen[at - W] = 1; stack[top++] = at - W; }
+            if (y < H - 1 && dark[at + W] && !seen[at + W]) { seen[at + W] = 1; stack[top++] = at + W; }
+        }
+
+        if (!best || n > best.n) best = { n, l, r, t, b };
+    }
+
+    if (!best) return null;
+
+    filmPanel = {
+        x: best.l / W,
+        y: best.t / H,
+        w: (best.r - best.l + 1) / W,
+        h: (best.b - best.t + 1) / H
+    };
+
+    console.log("[film] window at " + (filmPanel.x * 100).toFixed(1) + "%, "
+        + (filmPanel.y * 100).toFixed(1) + "%  "
+        + (filmPanel.w * 100).toFixed(1) + "% x " + (filmPanel.h * 100).toFixed(1) + "%"
+        + "   (" + (filmPanel.w / filmPanel.h).toFixed(2) + " : 1)");
+
+    return filmPanel;
+}
+
+/* The film with one project's picture set into its window. Every tape gets its
+   own copy, since every tape carries a different project. */
+function makeFilmTexture(sourceMap, pictureUrl) {
+    const image = sourceMap && sourceMap.image;
+    const panel = readFilmPanel(image);
+    if (!panel || !pictureUrl) return sourceMap;
+
+    /* Not the texture's own size. At full resolution this is four megabytes of
+       canvas per tape and the same again in video memory, for something that
+       never covers more than a small part of the screen. */
+    const size = Math.min(FILM_TEXTURE_SIZE, Math.max(image.width || 512, image.height || 512));
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.flipY = sourceMap.flipY;
+    texture.encoding = THREE.sRGBEncoding;
+    texture.wrapS = sourceMap.wrapS;
+    texture.wrapT = sourceMap.wrapT;
+    texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+
+    const box = {
+        x: panel.x * size,
+        y: panel.y * size,
+        w: panel.w * size,
+        h: panel.h * size
+    };
+
+    const paint = (picture) => {
+        ctx.clearRect(0, 0, size, size);
+
+        /* The film first. Its window is solid black, so the picture has to go
+           over it - painted underneath, it would simply be covered up. */
+        if (image) {
+            try { ctx.drawImage(image, 0, 0, size, size); } catch (err) { return; }
+        }
+
+        if (!picture) { texture.needsUpdate = true; return; }
+
+        /* Filled into the window and trimmed, not fitted - a band of black
+           around a picture reads as a mistake, where a crop reads as a photo. */
+        const scale = Math.max(box.w / picture.width, box.h / picture.height);
+        const pw = picture.width * scale;
+        const ph = picture.height * scale;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(box.x, box.y, box.w, box.h);
+        ctx.clip();
+        ctx.drawImage(picture, box.x + (box.w - pw) / 2, box.y + (box.h - ph) / 2, pw, ph);
+
+        /* The scratches and dust laid back over the picture, keeping only what
+           is brighter than it. Without this the window comes out clean and new
+           while the paper around it is a hundred years old. */
+        if (image) {
+            ctx.globalCompositeOperation = "lighten";
+            try { ctx.drawImage(image, 0, 0, size, size); } catch (err) { /* leave it clean */ }
+        }
+        ctx.restore();
+
+        if (FILM_PANEL_TEST) {
+            ctx.strokeStyle = "#ff4d4d";
+            ctx.lineWidth = 4;
+            ctx.strokeRect(box.x, box.y, box.w, box.h);
+        }
+
+        texture.needsUpdate = true;
+    };
+
+    // The film alone until the picture arrives, and the two of them after
+    paint(null);
+
+    const picture = new Image();
+
+    /* A picture from another site - a video still, say - taints the canvas it
+       is drawn on, and a tainted canvas cannot be given to WebGL at all: the
+       film would fail entirely rather than merely lack a photograph. Asking
+       across with CORS means it either arrives usable or does not arrive. */
+    if (/^https?:/i.test(pictureUrl)) picture.crossOrigin = "anonymous";
+
+    picture.onload = () => paint(picture);
+    picture.onerror = () => { /* no picture: the film stands as it is */ };
+    picture.src = pictureUrl;
+
+    return texture;
+}
+
+/* Which picture goes on a project's film. Worked out when the site was built -
+   whatever was chosen for the film, or failing that whatever was starred first
+   for the index. */
+function pickTapeFilmPicture(info) {
+    return (info && info.film) || "";
+}
+
+/* The film is dressed the way the paper label is, and for the same reasons: it
+   is a blended plane stuck on the tape, so its alpha is the whole point of it
+   and must survive the per-frame pass that forces everything else solid, and an
+   alpha-blended thing casting shadow would throw the silhouette of its whole
+   quad rather than of the film. It joins the tape's highlight list too, so it
+   dims and brightens with the tape instead of staying lit while the tape it is
+   stuck to goes dark.
+   A film exported without blending is a solid object, and is treated as one. */
+function prepareTapeFilm(filmRoot, tape, pictureUrl) {
+    filmRoot.traverse((child) => {
+        if (!child.isMesh) return;
+
+        child.frustumCulled = false;
+        child.renderOrder = 1;   // under the label, which sits at 2
+
+        // clone() shares materials, so give every tape its own copy to tint
+        if (Array.isArray(child.material)) {
+            child.material = child.material.map(m => m.clone());
+        } else if (child.material) {
+            child.material = child.material.clone();
+        }
+
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        const blended = mats.some((mat) => mat && mat.transparent);
+
+        child.castShadow = !blended;
+        child.receiveShadow = !blended;
+
+        mats.forEach((mat) => {
+            if (!mat) return;
+            if (!mat.userData) mat.userData = {};
+
+            if (blended) {
+                // Marks it so the per-frame "force opaque" pass leaves its alpha alone
+                mat.userData.keepTransparent = true;
+
+                // Stuck flat against the tape, so bias it out of z-fighting
+                mat.polygonOffset = true;
+                mat.polygonOffsetFactor = -1;
+                mat.polygonOffsetUnits = -1;
+                mat.depthWrite = false;
+            }
+
+            if (mat.map) {
+                mat.map = makeFilmTexture(mat.map, pictureUrl);
+            }
+
+            if (mat.color && !mat.userData.baseColor) {
+                mat.userData.baseColor = mat.color.clone();
+            }
+            if (typeof mat.emissiveIntensity === 'number' && typeof mat.userData.baseEmissiveIntensity !== 'number') {
+                mat.userData.baseEmissiveIntensity = mat.emissiveIntensity;
+            }
+            mat.needsUpdate = true;
+
+            if (!tape.userData.highlightMats.includes(mat)) {
+                tape.userData.highlightMats.push(mat);
+            }
+        });
+    });
+}
+
 function prepareTapeLabel(labelRoot, tape) {
     labelRoot.traverse((child) => {
         if (!child.isMesh) return;
@@ -2119,6 +2398,18 @@ function buildTapes() {
             tape.userData.label = label;
         }
 
+        /* Stuck to the animated node, keeping the offset it was authored with,
+           so it rides along with every move of the tape exactly as the label
+           does - it was placed against the tape in the model, and that placing
+           is the whole of its positioning. */
+        if (tapeFilmGltf) {
+            const film = tapeFilmGltf.scene.clone(true);
+            film.name = "tape_film";
+            prepareTapeFilm(film, tape, pickTapeFilmPicture(projectData[i]));
+            getAnimatedTapeNode(tape, tapeGltf.animations).add(film);
+            tape.userData.film = film;
+        }
+
         scene.add(tape);
         tapes.push(tape);
     }
@@ -2129,6 +2420,7 @@ function buildTapes() {
 const buildTapesWhenReady = () => {
     if (!tapeGltf) return;
     if (tapeLabelGltfs.some(gltf => !gltf)) return;
+    if (!tapeFilmGltf) return;
     if (tapeBoxTexturesSettled < TAPE_BOX_TEXTURES.length) return;
     buildTapes();
 };
@@ -2160,6 +2452,11 @@ TAPE_BOX_TEXTURES.forEach((url, index) => {
 
 tapeLoader.load("models/tape.glb", gltf => {
     tapeGltf = gltf;
+    buildTapesWhenReady();
+});
+
+tapeFilmLoader.load("models/film.glb", gltf => {
+    tapeFilmGltf = gltf;
     buildTapesWhenReady();
 });
 

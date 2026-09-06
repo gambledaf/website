@@ -106,7 +106,22 @@
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OVERSEER // SYSTEM</title>
+    <title>Giorgi Gvazava — 3D Artist</title>
+    <meta name="description" content="Portfolio of Giorgi Gvazava, 3D artist. Modelling, lighting and rendering in Blender.">
+    <meta name="author" content="Giorgi Gvazava">
+
+    <!-- What a link to this page looks like when it is shared -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Giorgi Gvazava — 3D Artist">
+    <meta property="og:description" content="Modelling, lighting and rendering in Blender.">
+    <meta property="og:url" content="https://giorgigvazava.com/">
+
+    <!-- The mark on a dark tile, since the logo itself is cream and would all
+         but vanish on a light tab bar. 32 is the tab, 180 is what a phone uses
+         when the site is saved to a home screen. -->
+    <link rel="icon" href="images/favicon-32.png" sizes="32x32" type="image/png">
+    <link rel="icon" href="images/favicon-16.png" sizes="16x16" type="image/png">
+    <link rel="apple-touch-icon" href="images/favicon-180.png">
     <style>body{background:#000}</style>
     
     <script>
@@ -130,8 +145,8 @@
     <div class="scanline-bar"></div>
     <div class="monitor-frame">
         <div class="terminal-text">
-            <p>&gt; The name of your OVERSEER today is: Giorgi</p>
-            <p>&gt; Thoughtcrimes commited today: 0</p>
+            <p>&gt; OPERATOR: GIORGI GVAZAVA</p>
+            <p>&gt; DISCIPLINE: 3D / CGI</p>
         </div>
         <div class="center-content">
             <div class="logo-wrapper image-mode">
@@ -146,7 +161,7 @@
             </div>
         </div>
         <div class="bottom-footer">
-            <p class="tagline">'Innovate, Don't Be Evil'</p>
+            <p class="tagline">MODELLED, LIT AND RENDERED IN BLENDER</p>
         </div>
     </div>
 </div>
@@ -183,15 +198,27 @@
     <div class="tv-hotspot" id="hotspot-contact" title="Net.Comm">
         <div class="tv-glow-box"></div>
     </div>
-        <a href="mailto:your.email@gmail.com" id="hotspot-email" aria-label="Send email"></a>
+
+        <a href="mailto:contact@giorgigvazava.com" id="hotspot-email" aria-label="Send email"></a>
         <a
-            href="https://www.linkedin.com/in/your-profile/"
+            href="https://www.linkedin.com/in/giorgi-gvazava-2bb02a255/"
             id="hotspot-linkedin"
             aria-label="Open LinkedIn"
             target="_blank"
             rel="noopener noreferrer"
         ></a>
-        <button id="copyEmailBtn" data-email="your.email@gmail.com" type="button">Copy Email</button>
+
+        <!-- One panel for each link, shown while that link is under the pointer.
+             They sit after both links in the markup, which is what lets either
+             of them reach its own. Each is the shape of the footage, and the
+             wrapper around them is the footage's own rectangle, so at full size
+             they land exactly where they were drawn. -->
+        <div id="email-overlay" class="contact-panel" aria-hidden="true"></div>
+        <div id="linkedin-overlay" class="contact-panel" aria-hidden="true"></div>
+        <!-- No address of its own. It falls through to the mailto: on the link
+             above, so the address is written once and the button cannot end up
+             copying something the link does not open. -->
+        <button id="copyEmailBtn" type="button">Copy Email</button>
         <span id="copyFeedback">Email copied!</span>
 </div>
 
