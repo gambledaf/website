@@ -271,15 +271,32 @@ body.main-page {
 /* ========================================== */
 /* 6. HUD / TAPE HOVER UI                     */
 /* ========================================== */
+/* Centred high above the tapes. The category bar hides while a tape is hovered,
+   which is what leaves room to sit this far up and this large without either of
+   them landing on the shelf below. No panel of its own - the frames around the
+   pictures are enough, and a box here would only crowd them. */
 #tape-hover-ui {
     position: fixed;
-    top: 15%;
-    left: 8%;
+    top: 8%;
+    left: 50%;
+    transform: translateX(-50%);
     color: var(--crt-green);
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.3s ease;
     z-index: 50;
+    text-align: center;
+}
+
+/* Title and category share a line, so the pictures start higher up */
+#tape-hover-ui .hud-line {
+    justify-content: center;
+    margin-bottom: 4px;
+}
+
+#tape-hover-ui .hud-line:not(.hover-desc) {
+    display: inline-flex;
+    margin: 0 14px 4px;
 }
 
 #tape-hover-ui.visible { opacity: 1; }
@@ -322,31 +339,80 @@ body.main-page {
     pointer-events: auto;
 }
 
+/* Out of the way entirely while a tape is hovered: the preview takes this space */
 #tape-category-filter.hover-fade {
-    opacity: 0.08;
+    opacity: 0;
     pointer-events: none;
 }
 
+/* One wide row across the middle. There is far more width to spend here than
+   down the left side, so each frame is over twice the area of the little ones
+   it replaces, and the row still stops short of the tapes below. */
+/* One height for every frame and each as wide as its own picture wants. A grid
+   of equal cells had to crop everything to a single shape to look tidy; sharing
+   a height instead lines the row up top and bottom while every picture keeps
+   the shape it was made in. */
 .tape-preview-strip {
-    width: min(34vw, 460px);
-    margin-top: 10px;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    max-width: min(92vw, 1180px);
+    margin: 10px auto 0;
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: center;
+    align-items: stretch;
+    gap: 10px;
+    height: clamp(84px, 15vh, 188px);
 }
 
 .tape-preview-thumb {
+    position: relative;
     margin: 0;
-    border: 1px solid rgba(var(--crt-green-rgb), 0.45);
-    box-shadow: 0 0 9px rgba(var(--crt-green-rgb), 0.18);
+    border: 1px solid rgba(var(--crt-green-rgb), 0.55);
+    box-shadow: 0 0 12px rgba(var(--crt-green-rgb), 0.22);
     background: rgba(0, 0, 0, 0.45);
-    aspect-ratio: 16 / 10;
+    /* Its own shape, written on by the script from what the build measured -
+       the height is settled by the row, so this decides the width. */
+    aspect-ratio: var(--shot, 16 / 10);
+    height: 100%;
+    width: auto;
+    flex: 0 0 auto;
+    min-width: 0;
     overflow: hidden;
 }
 
-.tape-preview-thumb img {
+/* A still standing in for a video says so */
+.tape-preview-play {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    padding: 0 0.35em;
+    font-family: 'VT323', monospace;
+    font-size: 1.25rem;
+    line-height: 1.35;
+    color: rgba(var(--crt-green-rgb), 0.95);
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(var(--crt-green-rgb), 0.6);
+    pointer-events: none;
+}
+
+.tape-preview-thumb iframe {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
+    border: 0;
+    display: block;
+}
+
+.tape-preview-thumb img,
+.tape-preview-thumb video {
+    width: 100%;
+    height: 100%;
+    /* Covered, not contained: the frame is a fixed shape now, so a picture is
+       filled into it and trimmed. A preview is there to say what the project
+       looks like, and a uniform strip says it better than four exact but
+       mismatched crops. */
+    /* The frame is already the picture's own shape, so nothing is cut away */
     object-fit: cover;
     display: block;
 }
@@ -703,9 +769,11 @@ body.main-page {
         box-shadow: 0 0 12px rgba(var(--crt-green-rgb), 0.25);
     }
 
+    /* Four across is far too narrow once the panel is only a phone wide */
     .tape-preview-strip {
-        width: 100%;
+        max-width: 100%;
         gap: 6px;
+        height: clamp(64px, 11vh, 110px);
     }
 
     #tape-category-filter {
@@ -831,8 +899,10 @@ body.main-page {
         padding: 7px 8px;
     }
 
-    .tape-preview-strip {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+    /* Room for two on a phone. Anchored this high up, a longer row would push
+       the panel's title clean off the top of the screen. */
+    .tape-preview-thumb:nth-child(n + 3) {
+        display: none;
     }
 }
 

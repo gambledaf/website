@@ -77,7 +77,11 @@
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project 02</title>
+    <title>ARCHIVE // DESIGN_02</title>
+    <style>body{background:#050805}</style>
+
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+
     <script>
         (() => {
             const getUrl = (path) => (
@@ -86,16 +90,145 @@
                     : path
             );
 
-            const styleLink = document.createElement('link');
-            styleLink.rel = 'stylesheet';
-            styleLink.href = getUrl('../style.css');
-            document.head.appendChild(styleLink);
+            const baseStyleLink = document.createElement('link');
+            baseStyleLink.rel = 'stylesheet';
+            baseStyleLink.href = getUrl('../style.css');
+            document.head.appendChild(baseStyleLink);
+
+            const pageStyleLink = document.createElement('link');
+            pageStyleLink.rel = 'stylesheet';
+            pageStyleLink.href = getUrl('../project.css');
+            document.head.appendChild(pageStyleLink);
         })();
     </script>
 </head>
 <body>
 
-    <a href="../index.html" class="back-btn" id="eject-btn">■ EJECT & RETURN</a>
+    <div class="scroll-progress-bar" id="scroll-progress"></div>
+
+    <main class="crt-window">
+
+        <header class="window-header">
+            <span class="glitch-text">&gt; ARCHIVE_FILE: DESIGN_02.DAT</span>
+            <div class="header-right">
+                <span>[ STATUS: DECRYPTED ]</span>
+                <a href="../index.html" class="eject-btn" id="eject-btn" data-tape-index="0">■ EJECT</a>
+            </div>
+        </header>
+
+        <div class="project-grid" data-layout="free" data-canvas="1.4">
+
+            <div class="project-meta">
+                <div class="meta-field">
+                    <span class="meta-label">&gt; CATEGORY</span>
+                    <span class="meta-value">DESIGN</span>
+                </div>
+                <div class="meta-field">
+                    <span class="meta-label">&gt; YEAR</span>
+                    <span class="meta-value">2024</span>
+                </div>
+                <div class="meta-field">
+                    <span class="meta-label">&gt; MEDIUM</span>
+                    <span class="meta-value">3D / CGI</span>
+                </div>
+                <div class="meta-field">
+                    <span class="meta-label">&gt; TOOLS</span>
+                    <span class="meta-value">BLENDER</span>
+                </div>
+                <div class="meta-field">
+                    <span class="meta-label">&gt; STATUS</span>
+                    <span class="meta-value">ARCHIVED</span>
+                </div>
+            </div>
+
+            <div class="media-module video-module animate-in">
+                <div class="module-desc top-desc">
+                    <p>&gt; MOTION_CLIP</p>
+                </div>
+                <div class="video-frame">
+                    <iframe src="https://www.youtube.com/embed/dg9DjLen2B8?rel=0&amp;playsinline=1&amp;iv_load_policy=3&amp;color=white" data-x="0.18" data-y="0.02" data-w="0.64"
+                            class="scalable-media" frameborder="0" allowfullscreen>
+                    </iframe>
+                </div>
+            </div>
+
+            <div class="media-module animate-in">
+                <div class="image-frame">
+                    <img src="../images/projects/project_02/good-angel-1-view.webp" srcset="../images/projects/project_02/good-angel-1-view.webp 1920w, ../images/projects/project_02/good-angel-1-full.webp 1920w" sizes="45vw" data-thumb="../images/projects/project_02/good-angel-1-thumb.webp" data-full="../images/projects/project_02/good-angel-1-full.webp" width="1920" height="1920" data-half="1" data-x="0.51" data-y="0.44" data-w="0.31" alt="GOOD_ANGEL_1" class="scalable-media zoomable" loading="lazy">
+                </div>
+                <div class="module-desc">
+                    <p>&gt; GOOD_ANGEL_1</p>
+                </div>
+            </div>
+
+            <div class="media-module animate-in">
+                <div class="image-frame">
+                    <img src="../images/projects/project_02/evil-angel-1-view.webp" srcset="../images/projects/project_02/evil-angel-1-view.webp 1920w, ../images/projects/project_02/evil-angel-1-full.webp 1920w" sizes="45vw" data-thumb="../images/projects/project_02/evil-angel-1-thumb.webp" data-full="../images/projects/project_02/evil-angel-1-full.webp" width="1920" height="1920" data-half="1" data-x="0.18" data-y="0.44" data-w="0.31" alt="EVIL_ANGEL_1" class="scalable-media zoomable" loading="lazy">
+                </div>
+                <div class="module-desc">
+                    <p>&gt; EVIL_ANGEL_1</p>
+                </div>
+            </div>
+
+            <div class="media-module gallery-module animate-in" data-x="0.18" data-y="0.7952" data-w="0.64" data-h="0.4">
+                <div class="module-desc top-desc">
+                    <p>&gt; ENVIRONMENT_1</p>
+                </div>
+                <div class="gallery-frames">
+                    <img src="../images/projects/project_02/environment-1-2-view.webp" srcset="../images/projects/project_02/environment-1-2-view.webp 1920w, ../images/projects/project_02/environment-1-2-full.webp 1920w" sizes="45vw" data-thumb="../images/projects/project_02/environment-1-2-thumb.webp" data-full="../images/projects/project_02/environment-1-2-full.webp" width="1920" height="1080" alt="ENVIRONMENT_1" class="gallery-frame zoomable" loading="lazy">
+                    <img src="../images/projects/project_02/environment-2-2-view.webp" srcset="../images/projects/project_02/environment-2-2-view.webp 1920w, ../images/projects/project_02/environment-2-2-full.webp 1920w" sizes="45vw" data-thumb="../images/projects/project_02/environment-2-2-thumb.webp" data-full="../images/projects/project_02/environment-2-2-full.webp" width="1920" height="1080" alt="ENVIRONMENT_2" class="gallery-frame zoomable" loading="lazy">
+                    <img src="../images/projects/project_02/environment-3-2-view.webp" srcset="../images/projects/project_02/environment-3-2-view.webp 1920w, ../images/projects/project_02/environment-3-2-full.webp 1920w" sizes="45vw" data-thumb="../images/projects/project_02/environment-3-2-thumb.webp" data-full="../images/projects/project_02/environment-3-2-full.webp" width="1920" height="1080" alt="ENVIRONMENT_3" class="gallery-frame zoomable" loading="lazy">
+                    <img src="../images/projects/project_02/environment-4-2-view.webp" srcset="../images/projects/project_02/environment-4-2-view.webp 1920w, ../images/projects/project_02/environment-4-2-full.webp 1920w" sizes="45vw" data-thumb="../images/projects/project_02/environment-4-2-thumb.webp" data-full="../images/projects/project_02/environment-4-2-full.webp" width="1920" height="1080" alt="ENVIRONMENT_4" class="gallery-frame zoomable" loading="lazy">
+                    <img src="../images/projects/project_02/environment-5-2-view.webp" srcset="../images/projects/project_02/environment-5-2-view.webp 1920w, ../images/projects/project_02/environment-5-2-full.webp 1920w" sizes="45vw" data-thumb="../images/projects/project_02/environment-5-2-thumb.webp" data-full="../images/projects/project_02/environment-5-2-full.webp" width="1920" height="1080" alt="ENVIRONMENT_5" class="gallery-frame zoomable" loading="lazy">
+                    <img src="../images/projects/project_02/environment-6-2-view.webp" srcset="../images/projects/project_02/environment-6-2-view.webp 1920w, ../images/projects/project_02/environment-6-2-full.webp 1920w" sizes="45vw" data-thumb="../images/projects/project_02/environment-6-2-thumb.webp" data-full="../images/projects/project_02/environment-6-2-full.webp" width="1920" height="1080" alt="ENVIRONMENT_6" class="gallery-frame zoomable" loading="lazy">
+                </div>
+            </div>
+
+            <div class="media-module spacer-module animate-in" data-x="0.18" data-y="1.22" data-w="0.64" data-h="0.04"></div>
+
+        </div>
+
+        <div class="next-project-section">
+            <span class="next-project-label">&gt; NEXT_FILE</span>
+            <a href="project_01.html" class="next-project-btn">
+                ARCHIVE_FILE: AMP Suit.DAT <span class="next-arrow">&#8594;</span>
+            </a>
+        </div>
+
+        <div class="related-work-section">
+            <div class="related-work-header">&gt; RELATED_ARCHIVES</div>
+            <div class="related-work-grid">
+                <a href="project_01.html" class="related-work-card">
+                    <div class="card-thumb">
+                        <img src="../images/projects/project_01/photo-01-thumb.webp" alt="AMP SUIT" loading="lazy">
+                    </div>
+                    <span class="card-title">AMP Suit.DAT</span>
+                    <span class="card-cat">&gt; Personal Project</span>
+                </a>
+                <a href="project_03.html" class="related-work-card">
+                    <div class="card-thumb">
+                        <span class="card-empty">&gt; NO_PREVIEW</span>
+                    </div>
+                    <span class="card-title">PROJECT_03.DAT</span>
+                    <span class="card-cat">&gt; Category_03</span>
+                </a>
+                <a href="project_04.html" class="related-work-card">
+                    <div class="card-thumb">
+                        <span class="card-empty">&gt; NO_PREVIEW</span>
+                    </div>
+                    <span class="card-title">PROJECT_04.DAT</span>
+                    <span class="card-cat">&gt; Category_04</span>
+                </a>
+            </div>
+        </div>
+
+    </main>
+
+    <div id="lightbox" class="lightbox-overlay" style="display: none;">
+        <span id="close-lightbox">[X]</span>
+        <img id="lightbox-img" src="" alt="Full Screen">
+        <video id="lightbox-video" controls playsinline style="display: none;"></video>
+    </div>
 
     <script>
         (() => {
@@ -109,18 +242,12 @@
             navbarScript.src = getUrl('../navbar.js');
             navbarScript.async = false;
             document.body.appendChild(navbarScript);
-        })();
-    </script>
 
-    <script>
-        // Optional: Your Eject & Return memory script from earlier, updated with ../
-        document.getElementById('eject-btn').addEventListener('click', (e) => {
-            e.preventDefault();
-            localStorage.setItem('returnTapeIndex', 1); // Use 0 for project_01, 1 for project_02
-            document.body.style.transition = "opacity 0.5s ease";
-            document.body.style.opacity = "0";
-            setTimeout(() => { window.location.href = "../index.html"; }, 500);
-        });
+            const projectScript = document.createElement('script');
+            projectScript.src = getUrl('../js/project.js');
+            projectScript.async = false;
+            document.body.appendChild(projectScript);
+        })();
     </script>
 </body>
 </html>

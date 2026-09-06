@@ -5,8 +5,10 @@
   "main": "script.js",
   "scripts": {
     "bump:version": "node scripts/bump-version.mjs",
-    "predeploy": "npm run bump:version",
-    "deploy": "gh-pages -d ."
+    "predeploy": "npm run build:pages && npm run bump:version",
+    "deploy": "node scripts/deploy.mjs",
+    "manage": "node tools/manage/server.mjs",
+    "build:pages": "node tools/build-pages.mjs"
   },
   "repository": {
     "type": "git",
@@ -25,6 +27,7 @@
   },
   "homepage": "https://gambledaf.github.io/website/",
   "devDependencies": {
-    "gh-pages": "^6.3.0"
+    "gh-pages": "^6.3.0",
+    "sharp": "^0.35.4"
   }
 }

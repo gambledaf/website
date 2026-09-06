@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script>
+        (() => {
+            const VERSION_KEY = 'portfolio_version';
+            const RELOAD_GUARD_KEY = 'portfolio_reload_guard';
+            const stripVersionParam = () => {
+                try {
+                    const url = new URL(window.location.href);
+                    if (!url.searchParams.has('v')) return;
+                    url.searchParams.delete('v');
+                    const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+                    window.history.replaceState({}, document.title, nextUrl);
+                } catch {
+                    // Ignore URL rewrite issues.
+                }
+            };
+
+            const initialVersion = localStorage.getItem(VERSION_KEY) || '';
+            window.__portfolioVersion = initialVersion;
+            window.getVersionedAssetUrl = (path) => {
+                const version = window.__portfolioVersion || localStorage.getItem(VERSION_KEY) || '';
+                if (!version) return path;
+                const sep = path.includes('?') ? '&' : '?';
+                return `${path}${sep}v=${encodeURIComponent(version)}`;
+            };
+
+            fetch(`../version.json?ts=${Date.now()}`, {
+                cache: 'no-store',
+                headers: { 'Cache-Control': 'no-cache' }
+            })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`Version fetch failed: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then((data) => {
+                    const liveVersion = (typeof data?.version === 'string') ? data.version.trim() : '';
+                    if (!liveVersion) return;
+
+                    const localVersion = localStorage.getItem(VERSION_KEY);
+
+                    if (!localVersion) {
+                        localStorage.setItem(VERSION_KEY, liveVersion);
+                        window.__portfolioVersion = liveVersion;
+                        stripVersionParam();
+                        return;
+                    }
+
+                    if (localVersion === liveVersion) {
+                        window.__portfolioVersion = liveVersion;
+                        if (sessionStorage.getItem(RELOAD_GUARD_KEY) === liveVersion) {
+                            sessionStorage.removeItem(RELOAD_GUARD_KEY);
+                        }
+                        stripVersionParam();
+                        return;
+                    }
+
+                    localStorage.setItem(VERSION_KEY, liveVersion);
+                    window.__portfolioVersion = liveVersion;
+
+                    const url = new URL(window.location.href);
+                    if (sessionStorage.getItem(RELOAD_GUARD_KEY) === liveVersion || url.searchParams.get('v') === liveVersion) {
+                        stripVersionParam();
+                        return;
+                    }
+                    sessionStorage.setItem(RELOAD_GUARD_KEY, liveVersion);
+                    url.searchParams.set('v', liveVersion);
+                    window.location.replace(url.toString());
+                })
+                .catch(() => {
+                    // Keep current cached version token on temporary network failures.
+                });
+        })();
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARCHIVE // PROJECT_04</title>
+    <style>body{background:#050805}</style>
+
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+
+    <script>
+        (() => {
+            const getUrl = (path) => (
+                typeof window.getVersionedAssetUrl === 'function'
+                    ? window.getVersionedAssetUrl(path)
+                    : path
+            );
+
+            const baseStyleLink = document.createElement('link');
+            baseStyleLink.rel = 'stylesheet';
+            baseStyleLink.href = getUrl('../style.css');
+            document.head.appendChild(baseStyleLink);
+
+            const pageStyleLink = document.createElement('link');
+            pageStyleLink.rel = 'stylesheet';
+            pageStyleLink.href = getUrl('../project.css');
+            document.head.appendChild(pageStyleLink);
+        })();
+    </script>
+</head>
+<body>
+
+    <div class="scroll-progress-bar" id="scroll-progress"></div>
+
+    <main class="crt-window">
+
+        <header class="window-header">
+            <span class="glitch-text">&gt; ARCHIVE_FILE: PROJECT_04.DAT</span>
+            <div class="header-right">
+                <span>[ STATUS: DECRYPTED ]</span>
+                <a href="../index.html" class="eject-btn" id="eject-btn" data-tape-index="3">■ EJECT</a>
+            </div>
+        </header>
+
+        <div class="project-grid" data-layout="free" data-canvas="1.4">
+
+            <div class="project-meta">
+                <div class="meta-field">
+                    <span class="meta-label">&gt; CATEGORY</span>
+                    <span class="meta-value">Category_04</span>
+                </div>
+                <div class="meta-field">
+                    <span class="meta-label">&gt; YEAR</span>
+                    <span class="meta-value">2026</span>
+                </div>
+                <div class="meta-field">
+                    <span class="meta-label">&gt; MEDIUM</span>
+                    <span class="meta-value">3D / CGI</span>
+                </div>
+                <div class="meta-field">
+                    <span class="meta-label">&gt; TOOLS</span>
+                    <span class="meta-value">BLENDER</span>
+                </div>
+                <div class="meta-field">
+                    <span class="meta-label">&gt; STATUS</span>
+                    <span class="meta-value">ARCHIVED</span>
+                </div>
+            </div>
+
+            <div class="media-module video-module animate-in">
+                <div class="module-desc top-desc">
+                    <p>&gt; MOTION_CLIP</p>
+                </div>
+                <div class="video-frame">
+                    <iframe src="https://www.youtube.com/embed/L_SzCrNTZzA?rel=0&amp;playsinline=1&amp;iv_load_policy=3&amp;color=white" data-x="0.195" data-y="0.02" data-w="0.61"
+                            class="scalable-media" frameborder="0" allowfullscreen>
+                    </iframe>
+                </div>
+            </div>
+
+            <div class="media-module gallery-module animate-in" data-x="0.195" data-y="0.38" data-w="0.61" data-h="0.36">
+                <div class="module-desc top-desc">
+                    <p>&gt; GLOZA</p>
+                </div>
+                <div class="gallery-frames">
+                    <img src="../images/projects/project_04/gloza-view.webp" srcset="../images/projects/project_04/gloza-view.webp 2048w, ../images/projects/project_04/gloza-full.jpg 3840w" sizes="45vw" data-thumb="../images/projects/project_04/gloza-thumb.webp" data-full="../images/projects/project_04/gloza-full.jpg" width="3840" height="2160" alt="GLOZA" class="gallery-frame zoomable" loading="lazy">
+                    <img src="../images/projects/project_04/planet-dux-view.webp" srcset="../images/projects/project_04/planet-dux-view.webp 2048w, ../images/projects/project_04/planet-dux-full.jpg 3840w" sizes="45vw" data-thumb="../images/projects/project_04/planet-dux-thumb.webp" data-full="../images/projects/project_04/planet-dux-full.jpg" width="3840" height="2160" alt="PLANET_DUX" class="gallery-frame zoomable" loading="lazy">
+                    <img src="../images/projects/project_04/planet-glozark-view.webp" srcset="../images/projects/project_04/planet-glozark-view.webp 2048w, ../images/projects/project_04/planet-glozark-full.jpg 3840w" sizes="45vw" data-thumb="../images/projects/project_04/planet-glozark-thumb.webp" data-full="../images/projects/project_04/planet-glozark-full.jpg" width="3840" height="2160" alt="PLANET_GLOZARK" class="gallery-frame zoomable" loading="lazy">
+                    <img src="../images/projects/project_04/planet-tera-view.webp" srcset="../images/projects/project_04/planet-tera-view.webp 2048w, ../images/projects/project_04/planet-tera-full.webp 3840w" sizes="45vw" data-thumb="../images/projects/project_04/planet-tera-thumb.webp" data-full="../images/projects/project_04/planet-tera-full.webp" width="3840" height="2160" alt="PLANET_TERA" class="gallery-frame zoomable" loading="lazy">
+                    <img src="../images/projects/project_04/planet-teun-view.webp" srcset="../images/projects/project_04/planet-teun-view.webp 2048w, ../images/projects/project_04/planet-teun-full.jpg 3840w" sizes="45vw" data-thumb="../images/projects/project_04/planet-teun-thumb.webp" data-full="../images/projects/project_04/planet-teun-full.jpg" width="3840" height="2160" alt="PLANET_TEUN" class="gallery-frame zoomable" loading="lazy">
+                    <img src="../images/projects/project_04/tivian-moon-view.webp" srcset="../images/projects/project_04/tivian-moon-view.webp 2048w, ../images/projects/project_04/tivian-moon-full.webp 3840w" sizes="45vw" data-thumb="../images/projects/project_04/tivian-moon-thumb.webp" data-full="../images/projects/project_04/tivian-moon-full.webp" width="3840" height="2160" alt="TIVIAN_MOON" class="gallery-frame zoomable" loading="lazy">
+                </div>
+            </div>
+
+            <div class="media-module clip-module animate-in">
+                <div class="module-desc top-desc">
+                    <p>&gt; PLANET_ROOM</p>
+                </div>
+                <div class="video-frame">
+                    <video src="../images/projects/project_04/planet-room-clip.mp4" poster="../images/projects/project_04/planet-room-poster.webp" data-thumb="../images/projects/project_04/planet-room-thumb.webp" width="848" height="480" data-x="0.22" data-y="0.76" data-w="0.56"
+                           class="scalable-media" autoplay muted loop playsinline preload="metadata"></video>
+                </div>
+            </div>
+
+            <div class="media-module spacer-module animate-in" data-x="0.22" data-y="1.08" data-w="0.56" data-h="0.04"></div>
+
+        </div>
+
+        <div class="next-project-section">
+            <span class="next-project-label">&gt; NEXT_FILE</span>
+            <a href="project_05.html" class="next-project-btn">
+                ARCHIVE_FILE: PROJECT_05.DAT <span class="next-arrow">&#8594;</span>
+            </a>
+        </div>
+
+        <div class="related-work-section">
+            <div class="related-work-header">&gt; RELATED_ARCHIVES</div>
+            <div class="related-work-grid">
+                <a href="project_02.html" class="related-work-card">
+                    <div class="card-thumb">
+                        <img src="../images/projects/project_02/good-angel-1-thumb.webp" alt="Sovereign Life" loading="lazy">
+                    </div>
+                    <span class="card-title">DESIGN_02.DAT</span>
+                    <span class="card-cat">&gt; Category_02</span>
+                </a>
+                <a href="project_01.html" class="related-work-card">
+                    <div class="card-thumb">
+                        <img src="../images/projects/project_01/photo-01-thumb.webp" alt="AMP SUIT" loading="lazy">
+                    </div>
+                    <span class="card-title">AMP Suit.DAT</span>
+                    <span class="card-cat">&gt; Personal Project</span>
+                </a>
+                <a href="project_03.html" class="related-work-card">
+                    <div class="card-thumb">
+                        <span class="card-empty">&gt; NO_PREVIEW</span>
+                    </div>
+                    <span class="card-title">PROJECT_03.DAT</span>
+                    <span class="card-cat">&gt; Category_03</span>
+                </a>
+            </div>
+        </div>
+
+    </main>
+
+    <div id="lightbox" class="lightbox-overlay" style="display: none;">
+        <span id="close-lightbox">[X]</span>
+        <img id="lightbox-img" src="" alt="Full Screen">
+        <video id="lightbox-video" controls playsinline style="display: none;"></video>
+    </div>
+
+    <script>
+        (() => {
+            const getUrl = (path) => (
+                typeof window.getVersionedAssetUrl === 'function'
+                    ? window.getVersionedAssetUrl(path)
+                    : path
+            );
+
+            const navbarScript = document.createElement('script');
+            navbarScript.src = getUrl('../navbar.js');
+            navbarScript.async = false;
+            document.body.appendChild(navbarScript);
+
+            const projectScript = document.createElement('script');
+            projectScript.src = getUrl('../js/project.js');
+            projectScript.async = false;
+            document.body.appendChild(projectScript);
+        })();
+    </script>
+</body>
+</html>

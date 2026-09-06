@@ -163,22 +163,25 @@ if ((inSubfolder || projectGridEl) && navbarEl && logoEl) {
         const currentScroll = getCurrentScroll();
         const delta = currentScroll - lastScroll;
 
+        /* Once it is out of the way it stays out of the way until the reader is
+           back at the very top. Reversing by a notch used to bring it back over
+           the work, which is the last place it is wanted, and the pinned file
+           header carries the name and the eject button in the meantime. The top
+           edge of the screen still reveals it on hover. */
         if (currentScroll <= 10) {
             navVisibilityState.scrollHidden = false;
             scrollAccumulator = 0;
             lastDirection = 0;
-        } else if (delta !== 0) {
-            const direction = delta > 0 ? 1 : -1;
-
-            if (direction !== lastDirection) {
+        } else if (delta > 0) {
+            if (lastDirection !== 1) {
                 scrollAccumulator = 0;
-                lastDirection = direction;
+                lastDirection = 1;
             }
 
-            scrollAccumulator += Math.abs(delta);
+            scrollAccumulator += delta;
 
             if (scrollAccumulator >= deltaThreshold) {
-                navVisibilityState.scrollHidden = direction > 0;
+                navVisibilityState.scrollHidden = true;
                 scrollAccumulator = 0;
             }
         }
