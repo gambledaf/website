@@ -98,7 +98,7 @@ body.main-page {
 }
 
 /* ========================================== */
-/* 4. OVERSEER LOADING SCREEN                 */
+/* 4. LOADING SCREEN                          */
 /* ========================================== */
 #loading-screen {
     position: fixed;
@@ -486,13 +486,13 @@ body.main-page {
     min-width: 177.77vh; 
 
     /* Contact email hotspot calibration (percentage-based so it scales with the 16:9 container). */
-    --email-hotspot-left: 50%;
+    --email-hotspot-left: 48.5%;
     --email-hotspot-top: 44.5%;
-    --email-hotspot-width: 14%;
+    --email-hotspot-width: 17%;
     --email-hotspot-height: 5%;
-    --linkedin-hotspot-left: 50%;
-    --linkedin-hotspot-top: 53%;
-    --linkedin-hotspot-width: 14%;
+    --linkedin-hotspot-left: 47%;
+    --linkedin-hotspot-top: 47%;
+    --linkedin-hotspot-width: 12%;
     --linkedin-hotspot-height: 5%;
     
     z-index: 40;
@@ -566,10 +566,10 @@ body.main-page {
 
 /* NOW WE USE SIMPLE PERCENTAGES! */
 /* 0% is the bottom/left of the image, 100% is the top/right */
-#hotspot-menu     { bottom: 31%; left: 43.8%; }
-#hotspot-about    { bottom: 31%; left: 46.9%; }
-#hotspot-projects { bottom: 31%; left: 50%; }
-#hotspot-contact  { bottom: 31%; left: 53%; }
+#hotspot-menu     { bottom: 31%; left: 43.5%; }
+#hotspot-about    { bottom: 31%; left: 46.4%; }
+#hotspot-projects { bottom: 31%; left: 49.5%; }
+#hotspot-contact  { bottom: 31%; left: 52.6%; }
 
 @keyframes blinker { to { visibility: hidden; } }
 
@@ -725,6 +725,46 @@ body.main-page {
 #hotspot-container.contact-active #hotspot-linkedin {
     opacity: 1;
     pointer-events: auto;
+}
+
+/* A panel over the television for each contact link, shown while that link is
+   under the pointer. Each is the shape of the footage, and this wrapper is
+   already the footage's own rectangle - so at full size they land exactly where
+   they were drawn, at every window shape, with nothing to line up by hand.
+
+   Held out of the page entirely until the contact section is open. They are
+   getting on for half a megabyte each, and a browser does not fetch the
+   background of something it is not drawing - so a visitor who never opens
+   contact never pays for them.
+
+   Under the links themselves in the stacking order, so those stay pressable. */
+.contact-panel {
+    display: none;
+}
+
+#hotspot-container.contact-active .contact-panel {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 99;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.22s ease;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+/* The versions with a real alpha channel. The originals are a glow on a solid
+   black card - no transparency in them at all - so laid over the television they
+   would black the whole screen out but for the glow itself. These carry the
+   brightness as alpha, which is what black already means over something dark. */
+#email-overlay { background-image: url("email-glow.webp"); }
+#linkedin-overlay { background-image: url("linkedin-glow.webp"); }
+
+#hotspot-container.contact-active #hotspot-email:hover ~ #email-overlay,
+#hotspot-container.contact-active #hotspot-linkedin:hover ~ #linkedin-overlay {
+    opacity: 1;
 }
 
 @media (max-width: 900px) {

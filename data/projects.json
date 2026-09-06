@@ -1,156 +1,10 @@
 {
   "projects": [
     {
-      "slug": "project_02",
-      "title": "Sovereign Life",
-      "archiveName": "DESIGN_02",
-      "category": "Category_02",
-      "shortDesc": "test_02",
-      "meta": [
-        {
-          "label": "CATEGORY",
-          "value": "DESIGN"
-        },
-        {
-          "label": "YEAR",
-          "value": "2024"
-        },
-        {
-          "label": "MEDIUM",
-          "value": "3D / CGI"
-        },
-        {
-          "label": "TOOLS",
-          "value": "BLENDER"
-        },
-        {
-          "label": "STATUS",
-          "value": "ARCHIVED"
-        }
-      ],
-      "works": [
-        {
-          "type": "video",
-          "src": "https://www.youtube.com/embed/dg9DjLen2B8?rel=0&playsinline=1&iv_load_policy=3&color=white",
-          "title": "MOTION_CLIP",
-          "body": "",
-          "x": 0.18,
-          "y": 0.02,
-          "wf": 0.64
-        },
-        {
-          "type": "image",
-          "src": "images/projects/project_02/good-angel-1-view.webp",
-          "thumb": "images/projects/project_02/good-angel-1-thumb.webp",
-          "full": "images/projects/project_02/good-angel-1-full.webp",
-          "viewW": 1920,
-          "h": 1920,
-          "title": "GOOD_ANGEL_1",
-          "body": "",
-          "half": true,
-          "x": 0.51,
-          "y": 0.44,
-          "wf": 0.31,
-          "w": 1920
-        },
-        {
-          "type": "image",
-          "src": "images/projects/project_02/evil-angel-1-view.webp",
-          "thumb": "images/projects/project_02/evil-angel-1-thumb.webp",
-          "full": "images/projects/project_02/evil-angel-1-full.webp",
-          "viewW": 1920,
-          "h": 1920,
-          "title": "EVIL_ANGEL_1",
-          "body": "",
-          "half": true,
-          "x": 0.18,
-          "y": 0.44,
-          "wf": 0.31,
-          "w": 1920
-        },
-        {
-          "type": "gallery",
-          "title": "ENVIRONMENT_1",
-          "body": "",
-          "frames": [
-            {
-              "src": "images/projects/project_02/environment-1-2-view.webp",
-              "thumb": "images/projects/project_02/environment-1-2-thumb.webp",
-              "full": "images/projects/project_02/environment-1-2-full.webp",
-              "viewW": 1920,
-              "w": 1920,
-              "h": 1080,
-              "title": "ENVIRONMENT_1"
-            },
-            {
-              "src": "images/projects/project_02/environment-2-2-view.webp",
-              "thumb": "images/projects/project_02/environment-2-2-thumb.webp",
-              "full": "images/projects/project_02/environment-2-2-full.webp",
-              "viewW": 1920,
-              "w": 1920,
-              "h": 1080,
-              "title": "ENVIRONMENT_2"
-            },
-            {
-              "src": "images/projects/project_02/environment-3-2-view.webp",
-              "thumb": "images/projects/project_02/environment-3-2-thumb.webp",
-              "full": "images/projects/project_02/environment-3-2-full.webp",
-              "viewW": 1920,
-              "w": 1920,
-              "h": 1080,
-              "title": "ENVIRONMENT_3"
-            },
-            {
-              "src": "images/projects/project_02/environment-4-2-view.webp",
-              "thumb": "images/projects/project_02/environment-4-2-thumb.webp",
-              "full": "images/projects/project_02/environment-4-2-full.webp",
-              "viewW": 1920,
-              "w": 1920,
-              "h": 1080,
-              "title": "ENVIRONMENT_4"
-            },
-            {
-              "src": "images/projects/project_02/environment-5-2-view.webp",
-              "thumb": "images/projects/project_02/environment-5-2-thumb.webp",
-              "full": "images/projects/project_02/environment-5-2-full.webp",
-              "viewW": 1920,
-              "w": 1920,
-              "h": 1080,
-              "title": "ENVIRONMENT_5"
-            },
-            {
-              "src": "images/projects/project_02/environment-6-2-view.webp",
-              "thumb": "images/projects/project_02/environment-6-2-thumb.webp",
-              "full": "images/projects/project_02/environment-6-2-full.webp",
-              "viewW": 1920,
-              "w": 1920,
-              "h": 1080,
-              "title": "ENVIRONMENT_6"
-            }
-          ],
-          "x": 0.18,
-          "y": 0.7952,
-          "wf": 0.64,
-          "hf": 0.4
-        },
-        {
-          "type": "spacer",
-          "x": 0.18,
-          "y": 1.22,
-          "wf": 0.64,
-          "hf": 0.04
-        }
-      ],
-      "layout": "free",
-      "cover": [
-        "https://www.youtube.com/embed/dg9DjLen2B8?rel=0&playsinline=1&iv_load_policy=3&color=white"
-      ]
-    },
-    {
       "slug": "project_01",
       "title": "AMP SUIT",
       "archiveName": "AMP Suit",
-      "category": "Personal Project",
+      "category": "Modeling",
       "shortDesc": "test_01",
       "meta": [
         {
@@ -252,204 +106,14 @@
         "images/projects/project_01/photo-01-view.webp",
         "images/projects/project_01/turn-clip.mp4",
         "images/projects/project_01/photo-05-view.webp"
-      ]
-    },
-    {
-      "slug": "project_03",
-      "title": "JiggyPiggies",
-      "archiveName": "PROJECT_03",
-      "category": "Category_03",
-      "shortDesc": "test_03",
-      "meta": [
-        {
-          "label": "CATEGORY",
-          "value": "Category_03"
-        },
-        {
-          "label": "YEAR",
-          "value": "2026"
-        },
-        {
-          "label": "MEDIUM",
-          "value": "3D / CGI"
-        },
-        {
-          "label": "TOOLS",
-          "value": "BLENDER"
-        },
-        {
-          "label": "STATUS",
-          "value": "ARCHIVED"
-        }
       ],
-      "works": [
-        {
-          "type": "gallery",
-          "title": "MOTION_CLIP",
-          "body": "",
-          "frames": [
-            {
-              "type": "video",
-              "src": "https://www.youtube.com/embed/Gt_EF8xej-4?rel=0&playsinline=1&iv_load_policy=3&color=white",
-              "title": "MOTION_CLIP"
-            },
-            {
-              "type": "video",
-              "src": "https://www.youtube.com/embed/HxYrIzPYH0U?rel=0&playsinline=1&iv_load_policy=3&color=white",
-              "title": "MOTION_CLIP"
-            },
-            {
-              "type": "video",
-              "src": "https://www.youtube.com/embed/KfHlTXw9o0U?rel=0&playsinline=1&iv_load_policy=3&color=white",
-              "title": "MOTION_CLIP"
-            }
-          ],
-          "x": 0.081,
-          "y": 0.01,
-          "wf": 0.8381,
-          "hf": 0.45
-        }
-      ],
-      "layout": "free"
-    },
-    {
-      "slug": "project_04",
-      "title": "Planets",
-      "archiveName": "PROJECT_04",
-      "category": "Category_04",
-      "shortDesc": "test_04",
-      "meta": [
-        {
-          "label": "CATEGORY",
-          "value": "Category_04"
-        },
-        {
-          "label": "YEAR",
-          "value": "2026"
-        },
-        {
-          "label": "MEDIUM",
-          "value": "3D / CGI"
-        },
-        {
-          "label": "TOOLS",
-          "value": "BLENDER"
-        },
-        {
-          "label": "STATUS",
-          "value": "ARCHIVED"
-        }
-      ],
-      "works": [
-        {
-          "type": "video",
-          "src": "https://www.youtube.com/embed/L_SzCrNTZzA?rel=0&playsinline=1&iv_load_policy=3&color=white",
-          "title": "MOTION_CLIP",
-          "body": "",
-          "x": 0.195,
-          "y": 0.02,
-          "wf": 0.61
-        },
-        {
-          "type": "gallery",
-          "title": "GLOZA",
-          "body": "",
-          "frames": [
-            {
-              "type": "image",
-              "src": "images/projects/project_04/gloza-view.webp",
-              "thumb": "images/projects/project_04/gloza-thumb.webp",
-              "full": "images/projects/project_04/gloza-full.jpg",
-              "viewW": 2048,
-              "w": 3840,
-              "h": 2160,
-              "title": "GLOZA"
-            },
-            {
-              "type": "image",
-              "src": "images/projects/project_04/planet-dux-view.webp",
-              "thumb": "images/projects/project_04/planet-dux-thumb.webp",
-              "full": "images/projects/project_04/planet-dux-full.jpg",
-              "viewW": 2048,
-              "w": 3840,
-              "h": 2160,
-              "title": "PLANET_DUX"
-            },
-            {
-              "type": "image",
-              "src": "images/projects/project_04/planet-glozark-view.webp",
-              "thumb": "images/projects/project_04/planet-glozark-thumb.webp",
-              "full": "images/projects/project_04/planet-glozark-full.jpg",
-              "viewW": 2048,
-              "w": 3840,
-              "h": 2160,
-              "title": "PLANET_GLOZARK"
-            },
-            {
-              "type": "image",
-              "src": "images/projects/project_04/planet-tera-view.webp",
-              "thumb": "images/projects/project_04/planet-tera-thumb.webp",
-              "full": "images/projects/project_04/planet-tera-full.webp",
-              "viewW": 2048,
-              "w": 3840,
-              "h": 2160,
-              "title": "PLANET_TERA"
-            },
-            {
-              "type": "image",
-              "src": "images/projects/project_04/planet-teun-view.webp",
-              "thumb": "images/projects/project_04/planet-teun-thumb.webp",
-              "full": "images/projects/project_04/planet-teun-full.jpg",
-              "viewW": 2048,
-              "w": 3840,
-              "h": 2160,
-              "title": "PLANET_TEUN"
-            },
-            {
-              "type": "image",
-              "src": "images/projects/project_04/tivian-moon-view.webp",
-              "thumb": "images/projects/project_04/tivian-moon-thumb.webp",
-              "full": "images/projects/project_04/tivian-moon-full.webp",
-              "viewW": 2048,
-              "w": 3840,
-              "h": 2160,
-              "title": "TIVIAN_MOON"
-            }
-          ],
-          "x": 0.195,
-          "y": 0.38,
-          "wf": 0.61,
-          "hf": 0.36
-        },
-        {
-          "type": "clip",
-          "src": "images/projects/project_04/planet-room-clip.mp4",
-          "thumb": "images/projects/project_04/planet-room-thumb.webp",
-          "poster": "images/projects/project_04/planet-room-poster.webp",
-          "w": 848,
-          "h": 480,
-          "title": "PLANET_ROOM",
-          "body": "",
-          "x": 0.22,
-          "y": 0.76,
-          "wf": 0.56,
-          "preview": "images/projects/project_04/planet-room-clip-preview.mp4"
-        },
-        {
-          "type": "spacer",
-          "x": 0.22,
-          "y": 1.08,
-          "wf": 0.56,
-          "hf": 0.04
-        }
-      ],
-      "layout": "free"
+      "film": "images/projects/project_01/photo-04-view.webp"
     },
     {
       "slug": "project_05",
       "title": "HondaCivic Type-R",
       "archiveName": "PROJECT_05",
-      "category": "Category_04",
+      "category": "Modeling",
       "shortDesc": "test_05",
       "meta": [
         {
@@ -458,7 +122,7 @@
         },
         {
           "label": "YEAR",
-          "value": "2026"
+          "value": "2024"
         },
         {
           "label": "MEDIUM",
@@ -610,13 +274,356 @@
           "type": "spacer"
         }
       ],
-      "layout": "free"
+      "layout": "free",
+      "cover": []
     },
     {
-      "slug": "project_06",
-      "title": "Project_06",
-      "archiveName": "PROJECT_06",
-      "category": "Category_04",
+      "slug": "project_08",
+      "title": "Aviator",
+      "archiveName": "PROJECT_08",
+      "category": "Modeling",
+      "shortDesc": "test_05",
+      "meta": [
+        {
+          "label": "CATEGORY",
+          "value": "Category_05"
+        },
+        {
+          "label": "YEAR",
+          "value": "2025"
+        },
+        {
+          "label": "MEDIUM",
+          "value": "3D / CGI"
+        },
+        {
+          "label": "TOOLS",
+          "value": "BLENDER"
+        },
+        {
+          "label": "STATUS",
+          "value": "ARCHIVED"
+        }
+      ],
+      "works": [
+        {
+          "type": "image",
+          "src": "images/projects/project_08/engine-view.webp",
+          "thumb": "images/projects/project_08/engine-thumb.webp",
+          "full": "images/projects/project_08/engine-full.webp",
+          "viewW": 2048,
+          "w": 3840,
+          "h": 2160,
+          "title": "ENGINE",
+          "body": ""
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_08/seat-view.webp",
+          "thumb": "images/projects/project_08/seat-thumb.webp",
+          "full": "images/projects/project_08/seat-full.webp",
+          "viewW": 2048,
+          "w": 3840,
+          "h": 2160,
+          "title": "SEAT",
+          "body": ""
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_08/4-view.webp",
+          "thumb": "images/projects/project_08/4-thumb.webp",
+          "full": "images/projects/project_08/4-full.webp",
+          "viewW": 2048,
+          "w": 3840,
+          "h": 2160,
+          "title": "4",
+          "body": ""
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_08/3-view.webp",
+          "thumb": "images/projects/project_08/3-thumb.webp",
+          "full": "images/projects/project_08/3-full.webp",
+          "viewW": 2048,
+          "w": 3840,
+          "h": 2160,
+          "title": "3",
+          "body": ""
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_08/2-view.webp",
+          "thumb": "images/projects/project_08/2-thumb.webp",
+          "full": "images/projects/project_08/2-full.webp",
+          "viewW": 2048,
+          "w": 3840,
+          "h": 2160,
+          "title": "2",
+          "body": ""
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_08/0-view.webp",
+          "thumb": "images/projects/project_08/0-thumb.webp",
+          "full": "images/projects/project_08/0-full.webp",
+          "viewW": 2048,
+          "w": 3840,
+          "h": 2160,
+          "title": "0",
+          "body": ""
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_08/05-v3-view.webp",
+          "thumb": "images/projects/project_08/05-v3-thumb.webp",
+          "full": "images/projects/project_08/05-v3-full.webp",
+          "viewW": 2048,
+          "w": 2880,
+          "h": 2880,
+          "title": "05_V3",
+          "body": ""
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_08/09-view.webp",
+          "thumb": "images/projects/project_08/09-thumb.webp",
+          "full": "images/projects/project_08/09-full.webp",
+          "viewW": 2048,
+          "w": 2880,
+          "h": 2880,
+          "title": "09",
+          "body": ""
+        },
+        {
+          "type": "clip",
+          "src": "images/projects/project_08/video-test0000-0048-clip.mp4",
+          "thumb": "images/projects/project_08/video-test0000-0048-thumb.webp",
+          "poster": "images/projects/project_08/video-test0000-0048-poster.webp",
+          "w": 1920,
+          "h": 1080,
+          "title": "VIDEO_TEST0000_0048",
+          "body": ""
+        }
+      ],
+      "layout": "strip",
+      "cover": [
+        "images/projects/project_08/video-test0000-0048-clip.mp4",
+        "images/projects/project_08/engine-view.webp",
+        "images/projects/project_08/4-view.webp"
+      ]
+    },
+    {
+      "slug": "project_07",
+      "title": "Mitamotorsports",
+      "archiveName": "PROJECT_07",
+      "category": "Rendering",
+      "shortDesc": "test_05",
+      "meta": [
+        {
+          "label": "CATEGORY",
+          "value": "Category_05"
+        },
+        {
+          "label": "YEAR",
+          "value": "2026"
+        },
+        {
+          "label": "MEDIUM",
+          "value": "3D / CGI"
+        },
+        {
+          "label": "TOOLS",
+          "value": "BLENDER"
+        },
+        {
+          "label": "STATUS",
+          "value": "ARCHIVED"
+        }
+      ],
+      "works": [
+        {
+          "type": "gallery",
+          "title": "WASHI_TEST_01_EDITED",
+          "body": "",
+          "frames": [
+            {
+              "type": "image",
+              "src": "images/projects/project_07/washi-test-01-edited-view.webp",
+              "thumb": "images/projects/project_07/washi-test-01-edited-thumb.webp",
+              "full": "images/projects/project_07/washi-test-01-edited-full.webp",
+              "viewW": 2048,
+              "w": 3840,
+              "h": 2160,
+              "title": "WASHI_TEST_01_EDITED"
+            },
+            {
+              "type": "image",
+              "src": "images/projects/project_07/washi-test-02-edited-view.webp",
+              "thumb": "images/projects/project_07/washi-test-02-edited-thumb.webp",
+              "full": "images/projects/project_07/washi-test-02-edited-full.webp",
+              "viewW": 2048,
+              "w": 3840,
+              "h": 2160,
+              "title": "WASHI_TEST_02_EDITED"
+            },
+            {
+              "type": "image",
+              "src": "images/projects/project_07/washi-test-03-edited-view.webp",
+              "thumb": "images/projects/project_07/washi-test-03-edited-thumb.webp",
+              "full": "images/projects/project_07/washi-test-03-edited-full.webp",
+              "viewW": 2048,
+              "w": 3840,
+              "h": 2160,
+              "title": "WASHI_TEST_03_EDITED"
+            }
+          ],
+          "x": 0.215,
+          "y": 0.02,
+          "wf": 0.57,
+          "hf": 0.34
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_07/01-view.webp",
+          "thumb": "images/projects/project_07/01-thumb.webp",
+          "full": "images/projects/project_07/01-full.webp",
+          "viewW": 2048,
+          "w": 3840,
+          "h": 2160,
+          "title": "01",
+          "body": "",
+          "x": 0.04,
+          "y": 0.38,
+          "wf": 0.445
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_07/02-view.webp",
+          "thumb": "images/projects/project_07/02-thumb.webp",
+          "full": "images/projects/project_07/02-full.webp",
+          "viewW": 2048,
+          "w": 3840,
+          "h": 2160,
+          "title": "02",
+          "body": "",
+          "x": 0.04,
+          "y": 0.6502,
+          "wf": 0.445
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_07/03-view.webp",
+          "thumb": "images/projects/project_07/03-thumb.webp",
+          "full": "images/projects/project_07/03-full.webp",
+          "viewW": 2048,
+          "w": 3840,
+          "h": 2160,
+          "title": "03",
+          "body": "",
+          "x": 0.5,
+          "y": 0.38,
+          "wf": 0.445
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_07/04-view.webp",
+          "thumb": "images/projects/project_07/04-thumb.webp",
+          "full": "images/projects/project_07/04-full.webp",
+          "viewW": 2048,
+          "w": 3840,
+          "h": 3840,
+          "title": "04",
+          "body": "",
+          "x": 0.5,
+          "y": 0.6502,
+          "wf": 0.445
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_07/cinematic-01-view.webp",
+          "thumb": "images/projects/project_07/cinematic-01-thumb.webp",
+          "full": "images/projects/project_07/cinematic-01-full.webp",
+          "viewW": 1475,
+          "w": 2160,
+          "h": 3000,
+          "title": "CINEMATIC_01",
+          "body": "",
+          "x": 0.04,
+          "y": 0.92,
+          "wf": 0.445
+        }
+      ],
+      "layout": "free",
+      "cover": []
+    },
+    {
+      "slug": "project_03",
+      "title": "JiggyPiggies",
+      "archiveName": "PROJECT_03",
+      "category": "Animation",
+      "shortDesc": "test_03",
+      "meta": [
+        {
+          "label": "CATEGORY",
+          "value": "Category_03"
+        },
+        {
+          "label": "YEAR",
+          "value": "2023"
+        },
+        {
+          "label": "MEDIUM",
+          "value": "3D / CGI"
+        },
+        {
+          "label": "TOOLS",
+          "value": "BLENDER"
+        },
+        {
+          "label": "STATUS",
+          "value": "ARCHIVED"
+        }
+      ],
+      "works": [
+        {
+          "type": "gallery",
+          "title": "MOTION_CLIP",
+          "body": "",
+          "frames": [
+            {
+              "type": "video",
+              "src": "https://www.youtube.com/embed/Gt_EF8xej-4?rel=0&playsinline=1&iv_load_policy=3&color=white",
+              "title": "MOTION_CLIP"
+            },
+            {
+              "type": "video",
+              "src": "https://www.youtube.com/embed/HxYrIzPYH0U?rel=0&playsinline=1&iv_load_policy=3&color=white",
+              "title": "MOTION_CLIP"
+            },
+            {
+              "type": "video",
+              "src": "https://www.youtube.com/embed/KfHlTXw9o0U?rel=0&playsinline=1&iv_load_policy=3&color=white",
+              "title": "MOTION_CLIP"
+            }
+          ],
+          "x": 0.081,
+          "y": 0.01,
+          "wf": 0.8381,
+          "hf": 0.45
+        }
+      ],
+      "layout": "free",
+      "cover": [
+        "https://www.youtube.com/embed/Gt_EF8xej-4?rel=0&playsinline=1&iv_load_policy=3&color=white",
+        "https://www.youtube.com/embed/HxYrIzPYH0U?rel=0&playsinline=1&iv_load_policy=3&color=white",
+        "https://www.youtube.com/embed/KfHlTXw9o0U?rel=0&playsinline=1&iv_load_policy=3&color=white"
+      ]
+    },
+    {
+      "slug": "project_04",
+      "title": "Planets",
+      "archiveName": "PROJECT_04",
+      "category": "Animation",
       "shortDesc": "test_04",
       "meta": [
         {
@@ -625,7 +632,7 @@
         },
         {
           "label": "YEAR",
-          "value": "2026"
+          "value": "2023"
         },
         {
           "label": "MEDIUM",
@@ -640,23 +647,127 @@
           "value": "ARCHIVED"
         }
       ],
-      "works": [],
-      "layout": "strip"
+      "works": [
+        {
+          "type": "video",
+          "src": "https://www.youtube.com/embed/L_SzCrNTZzA?rel=0&playsinline=1&iv_load_policy=3&color=white",
+          "title": "MOTION_CLIP",
+          "body": "",
+          "x": 0.195,
+          "y": 0.02,
+          "wf": 0.61
+        },
+        {
+          "type": "gallery",
+          "title": "GLOZA",
+          "body": "",
+          "frames": [
+            {
+              "type": "image",
+              "src": "images/projects/project_04/gloza-view.webp",
+              "thumb": "images/projects/project_04/gloza-thumb.webp",
+              "full": "images/projects/project_04/gloza-full.jpg",
+              "viewW": 2048,
+              "w": 3840,
+              "h": 2160,
+              "title": "GLOZA"
+            },
+            {
+              "type": "image",
+              "src": "images/projects/project_04/planet-dux-view.webp",
+              "thumb": "images/projects/project_04/planet-dux-thumb.webp",
+              "full": "images/projects/project_04/planet-dux-full.jpg",
+              "viewW": 2048,
+              "w": 3840,
+              "h": 2160,
+              "title": "PLANET_DUX"
+            },
+            {
+              "type": "image",
+              "src": "images/projects/project_04/planet-glozark-view.webp",
+              "thumb": "images/projects/project_04/planet-glozark-thumb.webp",
+              "full": "images/projects/project_04/planet-glozark-full.jpg",
+              "viewW": 2048,
+              "w": 3840,
+              "h": 2160,
+              "title": "PLANET_GLOZARK"
+            },
+            {
+              "type": "image",
+              "src": "images/projects/project_04/planet-tera-view.webp",
+              "thumb": "images/projects/project_04/planet-tera-thumb.webp",
+              "full": "images/projects/project_04/planet-tera-full.webp",
+              "viewW": 2048,
+              "w": 3840,
+              "h": 2160,
+              "title": "PLANET_TERA"
+            },
+            {
+              "type": "image",
+              "src": "images/projects/project_04/planet-teun-view.webp",
+              "thumb": "images/projects/project_04/planet-teun-thumb.webp",
+              "full": "images/projects/project_04/planet-teun-full.jpg",
+              "viewW": 2048,
+              "w": 3840,
+              "h": 2160,
+              "title": "PLANET_TEUN"
+            },
+            {
+              "type": "image",
+              "src": "images/projects/project_04/tivian-moon-view.webp",
+              "thumb": "images/projects/project_04/tivian-moon-thumb.webp",
+              "full": "images/projects/project_04/tivian-moon-full.webp",
+              "viewW": 2048,
+              "w": 3840,
+              "h": 2160,
+              "title": "TIVIAN_MOON"
+            }
+          ],
+          "x": 0.195,
+          "y": 0.38,
+          "wf": 0.61,
+          "hf": 0.36
+        },
+        {
+          "type": "clip",
+          "src": "images/projects/project_04/planet-room-clip.mp4",
+          "thumb": "images/projects/project_04/planet-room-thumb.webp",
+          "poster": "images/projects/project_04/planet-room-poster.webp",
+          "w": 848,
+          "h": 480,
+          "title": "PLANET_ROOM",
+          "body": "",
+          "x": 0.22,
+          "y": 0.76,
+          "wf": 0.56,
+          "preview": "images/projects/project_04/planet-room-clip-preview.mp4"
+        },
+        {
+          "type": "spacer",
+          "x": 0.22,
+          "y": 1.08,
+          "wf": 0.56,
+          "hf": 0.04
+        }
+      ],
+      "layout": "free",
+      "cover": [],
+      "film": "images/projects/project_04/tivian-moon-view.webp"
     },
     {
-      "slug": "project_07",
-      "title": "Project_07",
-      "archiveName": "PROJECT_07",
-      "category": "Category_05",
-      "shortDesc": "test_05",
+      "slug": "project_06",
+      "title": "MCL32",
+      "archiveName": "PROJECT_06",
+      "category": "Modeling",
+      "shortDesc": "test_04",
       "meta": [
         {
           "label": "CATEGORY",
-          "value": "Category_05"
+          "value": "Category_04"
         },
         {
           "label": "YEAR",
-          "value": "2026"
+          "value": "2023"
         },
         {
           "label": "MEDIUM",
@@ -671,23 +782,129 @@
           "value": "ARCHIVED"
         }
       ],
-      "works": [],
-      "layout": "strip"
+      "works": [
+        {
+          "type": "image",
+          "src": "images/projects/project_06/1-view.webp",
+          "thumb": "images/projects/project_06/1-thumb.webp",
+          "full": "images/projects/project_06/1-full.webp",
+          "viewW": 1920,
+          "w": 1920,
+          "h": 1080,
+          "title": "1",
+          "body": ""
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_06/3-view.webp",
+          "thumb": "images/projects/project_06/3-thumb.webp",
+          "full": "images/projects/project_06/3-full.webp",
+          "viewW": 1920,
+          "w": 1920,
+          "h": 1080,
+          "title": "3",
+          "body": ""
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_06/4-view.webp",
+          "thumb": "images/projects/project_06/4-thumb.webp",
+          "full": "images/projects/project_06/4-full.webp",
+          "viewW": 1920,
+          "w": 1920,
+          "h": 1080,
+          "title": "4",
+          "body": ""
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_06/5-view.webp",
+          "thumb": "images/projects/project_06/5-thumb.webp",
+          "full": "images/projects/project_06/5-full.webp",
+          "viewW": 1920,
+          "w": 1920,
+          "h": 1080,
+          "title": "5",
+          "body": ""
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_06/6-view.webp",
+          "thumb": "images/projects/project_06/6-thumb.webp",
+          "full": "images/projects/project_06/6-full.webp",
+          "viewW": 1920,
+          "w": 1920,
+          "h": 1080,
+          "title": "6",
+          "body": ""
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_06/7-view.webp",
+          "thumb": "images/projects/project_06/7-thumb.webp",
+          "full": "images/projects/project_06/7-full.webp",
+          "viewW": 1920,
+          "w": 1920,
+          "h": 1080,
+          "title": "7",
+          "body": ""
+        },
+        {
+          "type": "image",
+          "src": "images/projects/project_06/mclarentest2-view.webp",
+          "thumb": "images/projects/project_06/mclarentest2-thumb.webp",
+          "full": "images/projects/project_06/mclarentest2-full.webp",
+          "viewW": 1080,
+          "w": 1080,
+          "h": 1259,
+          "title": "MCLARENTEST2",
+          "body": ""
+        },
+        {
+          "type": "compare",
+          "title": "1_CLAY_",
+          "body": "",
+          "frames": [
+            {
+              "type": "image",
+              "src": "images/projects/project_06/1-clay-view.webp",
+              "thumb": "images/projects/project_06/1-clay-thumb.webp",
+              "full": "images/projects/project_06/1-clay-full.webp",
+              "viewW": 1920,
+              "w": 1920,
+              "h": 1080,
+              "title": "1_CLAY_"
+            },
+            {
+              "type": "image",
+              "src": "images/projects/project_06/1-2-view.webp",
+              "thumb": "images/projects/project_06/1-2-thumb.webp",
+              "full": "images/projects/project_06/1-2-full.webp",
+              "viewW": 1920,
+              "w": 1920,
+              "h": 1080,
+              "title": "1"
+            }
+          ]
+        }
+      ],
+      "layout": "strip",
+      "cover": []
     },
     {
-      "slug": "project_08",
-      "title": "Project_08",
-      "archiveName": "PROJECT_08",
-      "category": "Category_05",
-      "shortDesc": "test_05",
+      "slug": "project_02",
+      "title": "Sovereign Life",
+      "archiveName": "DESIGN_02",
+      "category": "Animation",
+      "shortDesc": "test_02",
       "meta": [
         {
           "label": "CATEGORY",
-          "value": "Category_05"
+          "value": "DESIGN"
         },
         {
           "label": "YEAR",
-          "value": "2026"
+          "value": "2023"
         },
         {
           "label": "MEDIUM",
@@ -702,101 +919,123 @@
           "value": "ARCHIVED"
         }
       ],
-      "works": [],
-      "layout": "strip"
-    },
-    {
-      "slug": "project_09",
-      "title": "Project_09",
-      "archiveName": "PROJECT_09",
-      "category": "Category_05",
-      "shortDesc": "test_05",
-      "meta": [
+      "works": [
         {
-          "label": "CATEGORY",
-          "value": "Category_05"
+          "type": "video",
+          "src": "https://www.youtube.com/embed/dg9DjLen2B8?rel=0&playsinline=1&iv_load_policy=3&color=white",
+          "title": "MOTION_CLIP",
+          "body": "",
+          "x": 0.18,
+          "y": 0.02,
+          "wf": 0.64
         },
         {
-          "label": "YEAR",
-          "value": "2026"
+          "type": "image",
+          "src": "images/projects/project_02/good-angel-1-view.webp",
+          "thumb": "images/projects/project_02/good-angel-1-thumb.webp",
+          "full": "images/projects/project_02/good-angel-1-full.webp",
+          "viewW": 1920,
+          "h": 1920,
+          "title": "GOOD_ANGEL_1",
+          "body": "",
+          "half": true,
+          "x": 0.51,
+          "y": 0.44,
+          "wf": 0.31,
+          "w": 1920
         },
         {
-          "label": "MEDIUM",
-          "value": "3D / CGI"
+          "type": "image",
+          "src": "images/projects/project_02/evil-angel-1-view.webp",
+          "thumb": "images/projects/project_02/evil-angel-1-thumb.webp",
+          "full": "images/projects/project_02/evil-angel-1-full.webp",
+          "viewW": 1920,
+          "h": 1920,
+          "title": "EVIL_ANGEL_1",
+          "body": "",
+          "half": true,
+          "x": 0.18,
+          "y": 0.44,
+          "wf": 0.31,
+          "w": 1920
         },
         {
-          "label": "TOOLS",
-          "value": "BLENDER"
+          "type": "gallery",
+          "title": "ENVIRONMENT_1",
+          "body": "",
+          "frames": [
+            {
+              "src": "images/projects/project_02/environment-1-2-view.webp",
+              "thumb": "images/projects/project_02/environment-1-2-thumb.webp",
+              "full": "images/projects/project_02/environment-1-2-full.webp",
+              "viewW": 1920,
+              "w": 1920,
+              "h": 1080,
+              "title": "ENVIRONMENT_1"
+            },
+            {
+              "src": "images/projects/project_02/environment-2-2-view.webp",
+              "thumb": "images/projects/project_02/environment-2-2-thumb.webp",
+              "full": "images/projects/project_02/environment-2-2-full.webp",
+              "viewW": 1920,
+              "w": 1920,
+              "h": 1080,
+              "title": "ENVIRONMENT_2"
+            },
+            {
+              "src": "images/projects/project_02/environment-3-2-view.webp",
+              "thumb": "images/projects/project_02/environment-3-2-thumb.webp",
+              "full": "images/projects/project_02/environment-3-2-full.webp",
+              "viewW": 1920,
+              "w": 1920,
+              "h": 1080,
+              "title": "ENVIRONMENT_3"
+            },
+            {
+              "src": "images/projects/project_02/environment-4-2-view.webp",
+              "thumb": "images/projects/project_02/environment-4-2-thumb.webp",
+              "full": "images/projects/project_02/environment-4-2-full.webp",
+              "viewW": 1920,
+              "w": 1920,
+              "h": 1080,
+              "title": "ENVIRONMENT_4"
+            },
+            {
+              "src": "images/projects/project_02/environment-5-2-view.webp",
+              "thumb": "images/projects/project_02/environment-5-2-thumb.webp",
+              "full": "images/projects/project_02/environment-5-2-full.webp",
+              "viewW": 1920,
+              "w": 1920,
+              "h": 1080,
+              "title": "ENVIRONMENT_5"
+            },
+            {
+              "src": "images/projects/project_02/environment-6-2-view.webp",
+              "thumb": "images/projects/project_02/environment-6-2-thumb.webp",
+              "full": "images/projects/project_02/environment-6-2-full.webp",
+              "viewW": 1920,
+              "w": 1920,
+              "h": 1080,
+              "title": "ENVIRONMENT_6"
+            }
+          ],
+          "x": 0.18,
+          "y": 0.7952,
+          "wf": 0.64,
+          "hf": 0.4
         },
         {
-          "label": "STATUS",
-          "value": "ARCHIVED"
+          "type": "spacer",
+          "x": 0.18,
+          "y": 1.22,
+          "wf": 0.64,
+          "hf": 0.04
         }
       ],
-      "works": [],
-      "layout": "strip"
-    },
-    {
-      "slug": "project_10",
-      "title": "Project_10",
-      "archiveName": "PROJECT_10",
-      "category": "Category_05",
-      "shortDesc": "test_05",
-      "meta": [
-        {
-          "label": "CATEGORY",
-          "value": "Category_05"
-        },
-        {
-          "label": "YEAR",
-          "value": "2026"
-        },
-        {
-          "label": "MEDIUM",
-          "value": "3D / CGI"
-        },
-        {
-          "label": "TOOLS",
-          "value": "BLENDER"
-        },
-        {
-          "label": "STATUS",
-          "value": "ARCHIVED"
-        }
-      ],
-      "works": [],
-      "layout": "strip"
-    },
-    {
-      "slug": "project_11",
-      "title": "Project_11",
-      "archiveName": "PROJECT_11",
-      "category": "Category_02",
-      "shortDesc": "test_05",
-      "meta": [
-        {
-          "label": "CATEGORY",
-          "value": "Category_02"
-        },
-        {
-          "label": "YEAR",
-          "value": "2026"
-        },
-        {
-          "label": "MEDIUM",
-          "value": "3D / CGI"
-        },
-        {
-          "label": "TOOLS",
-          "value": "BLENDER"
-        },
-        {
-          "label": "STATUS",
-          "value": "ARCHIVED"
-        }
-      ],
-      "works": [],
-      "layout": "strip"
+      "layout": "free",
+      "cover": [
+        "https://www.youtube.com/embed/dg9DjLen2B8?rel=0&playsinline=1&iv_load_policy=3&color=white"
+      ]
     }
   ]
 }

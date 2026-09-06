@@ -309,10 +309,6 @@ function buildProjectConsole() {
                             <div class="feed-row"></div>
                             <div class="feed-row"></div>
                         </div>
-                        <span class="frame-corner tl"></span>
-                        <span class="frame-corner tr"></span>
-                        <span class="frame-corner bl"></span>
-                        <span class="frame-corner br"></span>
                         <span class="frame-readout">----</span>
                     </div>
                 </section>
