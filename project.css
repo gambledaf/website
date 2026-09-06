@@ -50,6 +50,10 @@ body {
 /* --- TERMINAL HEADER --- */
 .window-header {
     color: var(--term-light);
+    /* Held at the top of the screen: the navbar gets out of the way on the first
+       scroll, and this takes over as the bar that says which file is open */
+    position: sticky;
+    top: 0;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -59,9 +63,10 @@ body {
     font-weight: bold;
     letter-spacing: 0.4px;
     margin-bottom: 20px;
-    z-index: 2;
+    z-index: 6;
     border: 1px solid rgba(var(--term-light-rgb), 0.5);
-    background: rgba(var(--term-bg-rgb), 0.86);
+    /* Opaque, so the works pass behind it rather than through it */
+    background: var(--term-bg);
     box-shadow: 0 0 8px rgba(var(--term-light-rgb), 0.2);
 }
 
@@ -457,12 +462,11 @@ body {
 
 /* --- HOVER EFFECTS --- */
 .zoomable {
-    filter: none;
-    transition: all 0.3s ease; cursor: pointer;
+    transition: filter 0.3s ease;
+    cursor: pointer;
 }
 .zoomable:hover {
-    filter: none; transform: scale(1.02);
-    box-shadow: var(--line-glow-strong);
+    filter: brightness(0.5);
 }
 
 /* ========================================== */
@@ -470,18 +474,71 @@ body {
 /* ========================================== */
 .lightbox-overlay {
     position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-    background: rgba(0, 0, 0, 0.9); z-index: 9999; 
-    display: none; justify-content: center; align-items: center;    
+    background: rgba(0, 0, 0, 0.92); z-index: 9999;
+    display: none; justify-content: center; align-items: center;
     padding: 30px; box-sizing: border-box;
+    /* The picture is dragged and pinched inside this, so the browser must not
+       claim those gestures for scrolling, and nothing may spill out of it */
+    overflow: hidden;
+    touch-action: none;
+    cursor: zoom-out;
 }
 
 /* The full-scale image itself */
 #lightbox-img {
     max-width: 100%; max-height: 100%;
-    object-fit: contain; 
-    border: 3px solid var(--term-light); 
-    box-shadow: 0 0 50px rgba(var(--term-light-rgb), 0.3); 
+    object-fit: contain;
+    border: 3px solid var(--term-light);
+    box-shadow: 0 0 50px rgba(var(--term-light-rgb), 0.3);
     display: block;
+    /* Zoom and pan are measured out from the top left of the fitted picture */
+    transform-origin: 0 0;
+    will-change: transform;
+    cursor: zoom-in;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+/* Grabbing only means anything once the picture is bigger than the screen */
+.lightbox-overlay.can-pan #lightbox-img { cursor: grab; }
+.lightbox-overlay.can-pan.is-grabbing #lightbox-img { cursor: grabbing; }
+
+#lightbox-video {
+    max-width: 100%;
+    max-height: 100%;
+    border: 3px solid var(--term-light);
+    box-shadow: 0 0 50px rgba(var(--term-light-rgb), 0.3);
+    background: #000;
+    display: block;
+}
+
+/* Zooming a clip means nothing, so the picture cursors are dropped for it */
+.lightbox-overlay.showing-clip,
+.lightbox-overlay.showing-clip #lightbox-video {
+    cursor: default;
+}
+
+.lightbox-readout {
+    position: absolute;
+    left: 50%;
+    bottom: 14px;
+    transform: translateX(-50%);
+    padding: 3px 12px;
+    background: rgba(var(--term-bg-rgb), 0.85);
+    border: 1px solid rgba(var(--term-light-rgb), 0.4);
+    color: var(--term-light);
+    font-family: 'VT323', monospace;
+    font-size: 0.95rem;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0.8;
+}
+
+@media (max-width: 700px) {
+    .lightbox-overlay { padding: 10px; }
+    .lightbox-readout { font-size: 0.82rem; bottom: 8px; }
 }
 
 /* The close button inside the lightbox */
@@ -501,4 +558,1526 @@ body {
 .module-desc,
 .video-module {
     text-shadow: 0 0 6px rgba(var(--term-light-rgb), 0.32);
+}
+
+/* Allow more description text to show */
+.module-desc p:last-child {
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+}
+
+/* ========================================== */
+/* --- SCROLL PROGRESS BAR               --- */
+/* ========================================== */
+.scroll-progress-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    width: 0%;
+    background: linear-gradient(90deg, var(--term-light), rgba(var(--term-light-rgb), 0.5));
+    box-shadow: 0 0 8px rgba(var(--term-light-rgb), 0.8), 0 0 16px rgba(var(--term-light-rgb), 0.4);
+    z-index: 9998;
+    transition: width 0.1s linear;
+    pointer-events: none;
+}
+
+/* ========================================== */
+/* --- WINDOW HEADER RIGHT GROUP         --- */
+/* ========================================== */
+.window-header > .header-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.eject-btn {
+    display: inline-block;
+    font-family: 'VT323', monospace;
+    font-size: 1.05rem;
+    color: var(--term-light);
+    border: 1px solid rgba(var(--term-light-rgb), 0.6);
+    padding: 4px 12px;
+    cursor: pointer;
+    background: rgba(var(--term-bg-rgb), 0.9);
+    text-decoration: none;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    transition: background 0.2s, box-shadow 0.2s;
+    box-shadow: 0 0 4px rgba(var(--term-light-rgb), 0.2);
+    line-height: 1.4;
+}
+
+.eject-btn:hover {
+    background: rgba(var(--term-light-rgb), 0.12);
+    box-shadow: var(--line-glow-soft);
+}
+
+/* ========================================== */
+/* --- PROJECT META BLOCK                --- */
+/* ========================================== */
+.project-meta {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    border: 1px solid var(--term-light);
+    background: rgba(var(--term-bg-rgb), 0.85);
+    box-shadow: var(--line-glow-soft);
+    overflow: hidden;
+    margin-bottom: 4px;
+}
+
+.meta-field {
+    padding: 12px 16px;
+    border-right: 1px solid rgba(var(--term-light-rgb), 0.28);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.meta-field:last-child {
+    border-right: none;
+}
+
+.meta-label {
+    font-size: 0.78rem;
+    opacity: 0.5;
+    letter-spacing: 2.5px;
+}
+
+.meta-value {
+    font-size: 1.25rem;
+    color: var(--term-light);
+    text-shadow: 0 0 8px rgba(var(--term-light-rgb), 0.5);
+    letter-spacing: 1px;
+}
+
+@media (max-width: 560px) {
+    .project-meta {
+        grid-template-columns: 1fr 1fr;
+    }
+    .meta-field {
+        border-bottom: 1px solid rgba(var(--term-light-rgb), 0.18);
+    }
+}
+
+/* ========================================== */
+/* --- ENTRANCE ANIMATIONS               --- */
+/* ========================================== */
+.animate-in {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.animate-in.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+
+/* ========================================== */
+/* --- GALLERY THUMBNAIL STRIP           --- */
+/* ========================================== */
+.gallery-thumbs {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    overflow-x: auto;
+    padding: 4px 2px 6px;
+    scrollbar-width: none;
+}
+
+.gallery-thumbs::-webkit-scrollbar {
+    display: none;
+}
+
+.gallery-thumb {
+    flex: 0 0 64px;
+    height: 44px;
+    border: 1px solid rgba(var(--term-light-rgb), 0.35);
+    background: transparent;
+    cursor: pointer;
+    overflow: hidden;
+    padding: 2px;
+    box-sizing: border-box;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.gallery-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    filter: saturate(0.25) brightness(0.7);
+    transition: filter 0.2s;
+}
+
+.gallery-thumb.active {
+    border-color: var(--term-light);
+    box-shadow: 0 0 6px rgba(var(--term-light-rgb), 0.5);
+}
+
+.gallery-thumb.active img,
+.gallery-thumb:hover img {
+    filter: saturate(0.55) brightness(1);
+}
+
+/* ========================================== */
+/* --- NEXT PROJECT SECTION              --- */
+/* ========================================== */
+.next-project-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 32px 20px 24px;
+    margin-top: 8px;
+    border-top: 1px dashed var(--term-light);
+    box-shadow: 0 -10px 20px -14px rgba(var(--term-light-rgb), 0.5);
+}
+
+.next-project-label {
+    font-size: 0.82rem;
+    opacity: 0.5;
+    letter-spacing: 3px;
+}
+
+.next-project-btn {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-family: 'VT323', monospace;
+    font-size: clamp(1.3rem, 2.5vw, 1.9rem);
+    color: var(--term-light);
+    text-decoration: none;
+    letter-spacing: 2px;
+    padding: 10px 26px;
+    border: 1px solid rgba(var(--term-light-rgb), 0.55);
+    background: rgba(var(--term-bg-rgb), 0.85);
+    transition: background 0.22s, box-shadow 0.22s, transform 0.2s;
+    box-shadow: var(--line-glow-soft);
+    cursor: pointer;
+}
+
+.next-project-btn:hover {
+    background: rgba(var(--term-light-rgb), 0.1);
+    box-shadow: var(--line-glow-strong);
+    transform: translateX(4px);
+}
+
+.next-arrow {
+    font-size: 1.3em;
+    transition: transform 0.2s;
+    display: inline-block;
+}
+
+.next-project-btn:hover .next-arrow {
+    transform: translateX(5px);
+}
+
+/* ========================================== */
+/* --- RELATED WORK SECTION              --- */
+/* ========================================== */
+.related-work-section {
+    padding: 24px 20px 28px;
+    border-top: 1px solid rgba(var(--term-light-rgb), 0.22);
+}
+
+.related-work-header {
+    font-size: 0.82rem;
+    opacity: 0.5;
+    letter-spacing: 3px;
+    margin-bottom: 16px;
+}
+
+.related-work-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.related-work-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    text-decoration: none;
+    color: var(--term-light);
+    border: 1px solid rgba(var(--term-light-rgb), 0.28);
+    background: rgba(var(--term-bg-rgb), 0.7);
+    padding: 10px;
+    transition: border-color 0.2s, background 0.2s, transform 0.2s;
+}
+
+.related-work-card:hover {
+    border-color: var(--term-light);
+    background: rgba(var(--term-light-rgb), 0.07);
+    transform: translateY(-2px);
+    box-shadow: var(--line-glow-soft);
+}
+
+.related-work-card .card-thumb {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background: #000;
+}
+
+.related-work-card .card-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    filter: saturate(0.25) brightness(0.7);
+    transition: filter 0.25s;
+}
+
+.related-work-card:hover .card-thumb img {
+    filter: saturate(0.55) brightness(1);
+}
+
+.related-work-card .card-title {
+    font-size: 1.1rem;
+    letter-spacing: 1px;
+    margin-top: 2px;
+}
+
+.related-work-card .card-cat {
+    font-size: 0.82rem;
+    opacity: 0.52;
+    letter-spacing: 2px;
+}
+
+
+/* ========================================== */
+/* --- PROJECT CONSOLE (HUD VIEWER)       --- */
+/* --- Left: thumbnail index / specs /    --- */
+/* --- active file readout. Pinned.       --- */
+/* --- Right: the works, scrolling.       --- */
+/* ========================================== */
+
+.project-console {
+    position: relative;
+    z-index: 2;
+    /* Out over the window's 2px padding, so the frame's top and bottom edges
+       below meet its left and right borders instead of stopping short */
+    margin: 0 -2px;
+    /* No height here on purpose: JS sets it to one screen of frame plus however
+       far the strip has to travel. That length is what converts page scroll
+       into sideways travel and then hands the scroll back to the page. */
+}
+
+/* Everything the reader works with, held on screen as one closed instrument -
+   the file header, the index panel and the window - inside a single frame that
+   stays put while the works travel through it. Pinning each part separately
+   left the top and bottom edges open, with nothing to close the box. */
+.console-stage {
+    position: sticky;
+    top: 10px;
+    height: calc(100vh - 20px); /* fallback where dvh is unsupported */
+    height: calc(100dvh - 20px);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    /* Only the two edges the page frame cannot keep on screen for itself. Its
+       own left and right borders run the height of the page, so these close the
+       rectangle rather than drawing a second one inside it. */
+    border-top: 2px solid var(--term-light);
+    border-bottom: 2px solid var(--term-light);
+    background-color: rgba(var(--term-bg-rgb), 0.92);
+    background-image:
+        linear-gradient(rgba(var(--term-light-rgb), 0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(var(--term-light-rgb), 0.06) 1px, transparent 1px);
+    background-size: 26px 26px;
+    box-shadow: var(--line-glow-soft);
+}
+
+/* Inside the frame the header no longer has to hold itself up */
+.console-stage > .window-header {
+    position: static;
+    flex: 0 0 auto;
+    margin-bottom: 0;
+}
+
+.console-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: clamp(238px, 22vw, 330px) minmax(0, 1fr);
+    gap: 14px;
+}
+
+/* The hidden attribute must win over the display rules below */
+.project-console [hidden] {
+    display: none !important;
+}
+
+/* --- LEFT PANEL (a column of the pinned frame) --- */
+.console-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 0;
+}
+
+.console-block {
+    position: relative;
+    border: 1px solid rgba(var(--term-light-rgb), 0.45);
+    background: linear-gradient(180deg, rgba(var(--term-light-rgb), 0.07) 0%, rgba(var(--term-light-rgb), 0.02) 100%);
+    box-shadow: inset 0 0 0 1px rgba(var(--term-light-rgb), 0.12), var(--line-glow-soft);
+    padding: 13px 11px 11px;
+    text-shadow: 0 0 6px rgba(var(--term-light-rgb), 0.32);
+}
+
+/* Caption notched into the top border, like a labelled instrument panel */
+.block-label {
+    position: absolute;
+    top: -9px;
+    left: 10px;
+    padding: 0 6px;
+    background: var(--term-bg);
+    font-size: 0.72rem;
+    letter-spacing: 2.5px;
+    opacity: 0.72;
+}
+
+/* --- INDEX / THUMBNAIL RAIL --- */
+.index-block {
+    flex: 1 1 auto;
+    min-height: 140px;
+    display: flex;
+    flex-direction: column;
+}
+
+.index-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 0.82rem;
+    letter-spacing: 2px;
+    opacity: 0.55;
+    border-bottom: 1px dashed rgba(var(--term-light-rgb), 0.25);
+    padding-bottom: 6px;
+    margin-bottom: 9px;
+}
+
+.thumb-rail {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    align-content: start;
+    gap: 8px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(var(--term-light-rgb), 0.45) transparent;
+}
+
+.thumb-rail::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.thumb-rail::-webkit-scrollbar-thumb {
+    background: rgba(var(--term-light-rgb), 0.4);
+}
+
+.rail-thumb {
+    position: relative;
+    /* 4:3 tile derived from its own width, so every grid row is uniform */
+    height: 0;
+    padding: 75% 0 0;
+    border: 1px solid rgba(var(--term-light-rgb), 0.3);
+    background: #000;
+    cursor: pointer;
+    overflow: hidden;
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+
+.rail-thumb img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    filter: saturate(0.25) brightness(0.55);
+    transition: filter 0.25s;
+}
+
+.rail-num {
+    position: absolute;
+    left: 3px;
+    bottom: 1px;
+    font-family: 'VT323', monospace;
+    font-size: 0.78rem;
+    color: var(--term-light);
+    opacity: 0.75;
+    text-shadow: 0 0 6px rgba(0, 0, 0, 0.9);
+    pointer-events: none;
+}
+
+.rail-thumb.is-video::after {
+    content: "\25B6";
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: var(--term-light);
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.9);
+    pointer-events: none;
+}
+
+.rail-thumb:hover {
+    border-color: rgba(var(--term-light-rgb), 0.7);
+}
+
+.rail-thumb:hover img {
+    filter: saturate(0.45) brightness(0.85);
+}
+
+.rail-thumb.active {
+    border-color: var(--term-light);
+    box-shadow: 0 0 8px rgba(var(--term-light-rgb), 0.55);
+}
+
+.rail-thumb.active img {
+    filter: saturate(0.6) brightness(1);
+}
+
+/* --- SPECS (reuses the existing .project-meta markup) --- */
+.console-panel .project-meta {
+    grid-column: auto;
+    display: flex;
+    flex-direction: column;
+    border: none;
+    background: none;
+    box-shadow: none;
+    margin: 0;
+    overflow: visible;
+}
+
+.console-panel .meta-field {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    padding: 4px 0;
+    border-right: none;
+    border-bottom: 1px dashed rgba(var(--term-light-rgb), 0.18);
+}
+
+.console-panel .meta-field:last-child {
+    border-bottom: none;
+}
+
+.console-panel .meta-label {
+    font-size: 0.72rem;
+    letter-spacing: 2px;
+}
+
+.console-panel .meta-value {
+    font-size: 1.05rem;
+}
+
+/* --- ACTIVE FILE READOUT (bottom of the panel) --- */
+.desc-block {
+    flex: 0 0 auto;
+}
+
+.desc-index {
+    font-size: 0.8rem;
+    letter-spacing: 2px;
+    opacity: 0.55;
+}
+
+.desc-title {
+    font-size: 1.3rem;
+    letter-spacing: 1px;
+    line-height: 1.15;
+    margin: 3px 0 7px;
+    padding-left: 8px;
+    border-left: 3px solid var(--term-light);
+    text-shadow: 0 0 10px rgba(var(--term-light-rgb), 0.55);
+    word-break: break-word;
+}
+
+.desc-body {
+    margin: 0 0 10px;
+    font-size: 1.05rem;
+    line-height: 1.28;
+    opacity: 0.85;
+    min-height: 2.6em;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    overflow: hidden;
+}
+
+.desc-readout {
+    display: flex;
+    gap: 16px;
+    align-items: flex-end;
+    border-top: 1px dashed rgba(var(--term-light-rgb), 0.25);
+    padding-top: 8px;
+}
+
+.readout-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.readout-cell i {
+    font-style: normal;
+    font-size: 0.68rem;
+    letter-spacing: 2px;
+    opacity: 0.45;
+}
+
+.readout-cell b {
+    font-weight: normal;
+    font-size: 0.98rem;
+    letter-spacing: 1px;
+}
+
+.sig-cell {
+    margin-left: auto;
+}
+
+.sig-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 15px;
+}
+
+.sig-bar s {
+    text-decoration: none;
+    width: 4px;
+    background: var(--term-light);
+    box-shadow: 0 0 6px rgba(var(--term-light-rgb), 0.6);
+    animation: sig-pulse 1.6s infinite;
+}
+
+.sig-bar s:nth-child(1) { height: 5px;  animation-delay: 0s; }
+.sig-bar s:nth-child(2) { height: 8px;  animation-delay: 0.2s; }
+.sig-bar s:nth-child(3) { height: 11px; animation-delay: 0.4s; }
+.sig-bar s:nth-child(4) { height: 15px; animation-delay: 0.6s; }
+
+@keyframes sig-pulse {
+    0%, 100% { opacity: 0.35; }
+    45%      { opacity: 1; }
+}
+
+/* --- SEEK ROW (jumps the feed one work at a time) --- */
+.seek-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 9px;
+    border-top: 1px dashed rgba(var(--term-light-rgb), 0.25);
+    padding-top: 9px;
+}
+
+.seek-nav {
+    font-family: 'VT323', monospace;
+    font-size: 1rem;
+    line-height: 1;
+    letter-spacing: 1px;
+    color: var(--term-light);
+    background: rgba(var(--term-bg-rgb), 0.9);
+    border: 1px solid rgba(var(--term-light-rgb), 0.55);
+    padding: 5px 9px;
+    cursor: pointer;
+    white-space: nowrap;
+    text-shadow: 0 0 6px rgba(var(--term-light-rgb), 0.32);
+    transition: background 0.2s, box-shadow 0.2s, opacity 0.2s;
+}
+
+.seek-nav:hover:not(:disabled) {
+    background: rgba(var(--term-light-rgb), 0.12);
+    box-shadow: var(--line-glow-soft);
+}
+
+.seek-nav:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+/* Position ruler - one tick per work */
+.seek-ticks {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 16px;
+    overflow: hidden;
+}
+
+.seek-ticks span {
+    flex: 1 1 auto;
+    height: 4px;
+    background: rgba(var(--term-light-rgb), 0.22);
+    transition: height 0.2s, background 0.2s, box-shadow 0.2s;
+}
+
+.seek-ticks span.active {
+    height: 14px;
+    background: var(--term-light);
+    box-shadow: 0 0 8px rgba(var(--term-light-rgb), 0.8);
+}
+
+/* --- RIGHT SIDE: THE VIEWING WINDOW ------------------------
+   One frame, held still while the page scrolls. The works are
+   laid out in a strip inside it and travel sideways through it;
+   once the strip runs out the frame lets go and the page
+   carries on down to whatever follows. */
+.console-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    min-height: 0;
+}
+
+.work-head {
+    display: flex;
+    flex: 0 0 auto;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 10px;
+    font-size: 1.02rem;
+    letter-spacing: 1.5px;
+    border: 1px solid var(--term-light);
+    background: rgba(var(--term-bg-rgb), 0.8);
+    box-shadow: var(--line-glow-soft);
+    text-shadow: 0 0 6px rgba(var(--term-light-rgb), 0.32);
+}
+
+.work-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.work-pos {
+    font-size: 0.9rem;
+    opacity: 0.6;
+    white-space: nowrap;
+}
+
+/* The window itself - the one part of the right column that never moves */
+.work-view {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    /* Room between the frame and the work inside it. At a hairline the first
+       picture butts straight against the border and the window reads as a crop
+       rather than something a work sits inside. The travel maths reads the
+       content box, so widening this is accounted for on its own. */
+    padding: 16px;
+    border: 1px solid var(--term-light);
+    background: transparent;
+    box-shadow: var(--line-glow-soft);
+    overflow: hidden;
+}
+
+/* The strip of works, slid sideways from JS as the page scrolls. It keeps the
+   window width and lets the columns spill out of its right side, which also
+   means a column measures itself against the window, not the whole strip. */
+.feed-track {
+    --strip-gap: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--strip-gap);
+    height: 100%;
+    width: 100%;
+    will-change: transform;
+}
+
+/* Two rows, packed tight and left to right. Their heights are not equal: JS
+   works out a height for each so both rows come out exactly the same length,
+   which is what lets the spacing stay even and still have the strip end square.
+   Splitting the difference any other way means either padding a work out to its
+   neighbour's width or cropping it, and this does neither. */
+.feed-row {
+    display: flex;
+    align-items: center;
+    gap: var(--strip-gap);
+    width: 100%;
+    flex: 0 0 auto;
+    /* An even split until JS has worked out the real heights, so the strip is
+       never left with nothing to show */
+    height: calc(50% - var(--strip-gap) / 2);
+}
+
+.feed-row .work-slide {
+    height: 100%;
+}
+
+.work-slide {
+    position: relative;
+    flex: 0 0 auto;
+    height: 100%;
+    /* The width a work is placed at is the width it draws at, border and all.
+       A set and a note are drawn with one, and without this those two came out
+       two pixels wider than they were placed - so centring left them a pixel
+       off the middle while everything else sat exactly on it. */
+    box-sizing: border-box;
+    /* A placeholder ratio until the picture arrives, then its real one, so the
+       strip has a length to measure without waiting on every download */
+    aspect-ratio: var(--ar, 16 / 9);
+    /* A work wider than the window could never be seen whole */
+    max-width: 100%;
+    margin: 0;
+    opacity: 0.72;
+    transition: opacity 0.25s, outline-color 0.25s;
+}
+
+/* Several works are on screen at once, so the one the panel is describing is
+   marked rather than the rest being pushed into the background */
+.work-slide.is-active {
+    opacity: 1;
+    outline: 1px solid rgba(var(--term-light-rgb), 0.75);
+    outline-offset: 3px;
+}
+
+.work-media {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    cursor: zoom-in;
+}
+
+/* Override the grid hover dim - a click here means enlarge */
+.work-media.zoomable:hover {
+    filter: brightness(1.06);
+}
+
+.work-slide.is-video {
+    aspect-ratio: 16 / 9;
+}
+
+/* A self-hosted clip behaves like a still in the strip - same box, same shape -
+   it just happens to be moving. It plays silently, and only while it is in the
+   window; the lightbox is where it gets its sound and a scrubber. */
+.work-slide.is-clip .work-media {
+    object-fit: contain;
+    background: #000;
+}
+
+.work-slide iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+}
+
+.frame-corner {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-color: rgba(var(--term-light-rgb), 0.85);
+    filter: drop-shadow(0 0 5px rgba(var(--term-light-rgb), 0.7));
+    pointer-events: none;
+}
+
+.frame-corner.tl { top: 4px;    left: 4px;  border-top: 2px solid;    border-left: 2px solid; }
+.frame-corner.tr { top: 4px;    right: 4px; border-top: 2px solid;    border-right: 2px solid; }
+.frame-corner.bl { bottom: 4px; left: 4px;  border-bottom: 2px solid; border-left: 2px solid; }
+.frame-corner.br { bottom: 4px; right: 4px; border-bottom: 2px solid; border-right: 2px solid; }
+
+.frame-readout {
+    position: absolute;
+    right: 12px;
+    bottom: 8px;
+    padding: 1px 7px;
+    background: rgba(0, 0, 0, 0.55);
+    font-size: 0.76rem;
+    letter-spacing: 2px;
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+.hud-blink {
+    animation: hud-blink 1.1s steps(1) infinite;
+}
+
+@keyframes hud-blink {
+    0%, 49%   { opacity: 1; }
+    50%, 100% { opacity: 0; }
+}
+
+/* --- READING AS A COLUMN ---------------------------------------------------
+   The same window and the same mechanism, turned ninety degrees: page scroll
+   carries the works upward instead of sideways. Suits projects where each piece
+   wants to be read with its note rather than scanned across a shelf. */
+.feed-track.is-vertical {
+    flex-direction: column;
+    align-items: center;
+    height: auto;
+    width: 100%;
+    gap: 26px;
+}
+
+.feed-track.is-vertical .work-slide {
+    /* Shrinks to its picture, so the note underneath is the same width as the
+       work it describes rather than running the whole column */
+    aspect-ratio: auto;
+    height: auto;
+    width: fit-content;
+    max-width: 100%;
+    margin: 0 auto;
+    /* Nothing is dimmed: in a column everything on screen is being read */
+    opacity: 1;
+}
+
+.feed-track.is-vertical .work-media {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    /* Deliberately short of the window it travels through. Filling it exactly
+       leaves the next work completely hidden, so there is nothing to say the
+       column continues; stopping around three quarters of the way lets the top
+       edge of the next one show. It also keeps a portrait from running to three
+       screens on its own. JS keeps --window-span in step with the frame. */
+    max-height: calc(var(--window-span, 70vh) * 0.76);
+}
+
+/* An embed has no size of its own, so fit-content collapses it to nothing much.
+   It takes the column's full width instead, capped by whatever width the height
+   limit allows, which is what keeps it as large as the pictures around it. */
+.feed-track.is-vertical .work-slide.is-video {
+    width: 100%;
+    max-width: min(100%, calc(var(--window-span, 70vh) * 0.76 * 16 / 9));
+    aspect-ratio: 16 / 9;
+}
+
+.feed-track.is-vertical .work-slide.is-clip .work-media {
+    aspect-ratio: 16 / 9;
+}
+
+/* Two narrow works sharing a line. Only the column groups them; the strip packs
+   by width already and has no use for it. */
+.feed-pair {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: var(--strip-gap, 12px);
+    width: 100%;
+}
+
+.feed-pair .work-slide {
+    max-width: calc(50% - var(--strip-gap, 12px) / 2);
+    margin: 0;
+}
+
+.feed-track.is-vertical .work-slide iframe {
+    height: 100%;
+}
+
+/* The note under a work. Only the column shows it - the strip has no room under
+   a picture, and its panel on the left already carries the same words. */
+.work-note {
+    display: none;
+    text-align: left;
+    margin-top: 9px;
+    padding-top: 7px;
+    border-top: 1px solid rgba(var(--term-light-rgb), 0.22);
+    /* The work shrinks to its picture, and a sentence of notes must not be what
+       decides how wide that is. Asking for no width at all keeps the note out of
+       that calculation; the min-width then stretches it to whatever the picture
+       settled on. Without this a narrow portrait comes out as wide as its
+       caption reads. */
+    width: 0;
+    min-width: 100%;
+}
+
+.feed-track.is-vertical .work-note {
+    display: block;
+}
+
+.work-note b {
+    display: block;
+    font-weight: normal;
+    font-size: 1.05rem;
+    letter-spacing: 1.5px;
+}
+
+.work-note span {
+    display: block;
+    margin-top: 2px;
+    font-size: 1rem;
+    line-height: 1.32;
+    opacity: 0.78;
+}
+
+/* A work with no note written for it keeps its name and nothing else */
+.work-note.is-bare span {
+    display: none;
+}
+
+
+/* --- EMBEDS -----------------------------------------------------------------
+   An embed stands as its own poster until somebody asks for it. What arrives
+   when a player is loaded is not ours - a title bar, a share button, a red mark
+   - and it arrives whether or not anyone meant to watch anything. This is the
+   still and a mark of our own; pressing it fetches the player, already running. */
+.embed-facade {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: #000;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.embed-facade img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    /* Held back a little, so the mark on it reads as the thing to press */
+    filter: saturate(0.8) brightness(0.72);
+    transition: filter 0.3s, transform 0.5s;
+}
+
+.embed-facade:hover img,
+.embed-facade:focus-visible img {
+    filter: none;
+    transform: scale(1.02);
+}
+
+.embed-play {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.1em 0.55em;
+    font-family: 'VT323', monospace;
+    /* The same share of the canvas the captions take, so a mark on a small
+       frame is small and one on a large frame is large */
+    font-size: calc(var(--canvas-text, 1rem) * 1.7);
+    color: var(--term-light);
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(var(--term-light-rgb), 0.6);
+    box-shadow: 0 0 14px rgba(var(--term-light-rgb), 0.3);
+    pointer-events: none;
+    transition: background 0.25s, box-shadow 0.25s;
+}
+
+.embed-facade:hover .embed-play,
+.embed-facade:focus-visible .embed-play {
+    background: rgba(var(--term-light-rgb), 0.25);
+    box-shadow: 0 0 20px rgba(var(--term-light-rgb), 0.5);
+}
+
+
+/* --- COMPARISON -------------------------------------------------------------
+   Two pictures of the same thing, one laid over the other, and a line the
+   reader drags across to trade one for the other. Where the line sits is a
+   share of the work's width; the picture on top is clipped to it rather than
+   resized, which is what keeps the two in register at every position. */
+.work-slide.is-compare {
+    --split: 50%;
+    background: #000;
+    overflow: visible;   /* the corner grip is drawn outside; the wrap clips */
+}
+
+.compare-wrap {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    cursor: ew-resize;
+    /* Or the browser answers a sideways drag by scrolling the page instead */
+    touch-action: none;
+}
+
+.compare-wrap img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    /* Filled, not fitted: two pictures a hair apart in shape would otherwise sit
+       in slightly different boxes, and a comparison that does not line up is
+       not a comparison */
+    object-fit: cover;
+    display: block;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+.compare-over {
+    position: absolute;
+    inset: 0;
+    clip-path: inset(0 calc(100% - var(--split)) 0 0);
+}
+
+.compare-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--split);
+    width: 2px;
+    margin-left: -1px;
+    background: var(--term-light);
+    box-shadow: 0 0 12px rgba(var(--term-light-rgb), 0.75);
+    pointer-events: none;
+}
+
+/* A grip on the line, so it reads as something to take hold of */
+.compare-handle::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 1.9em;
+    height: 1.9em;
+    border: 1px solid var(--term-light);
+    background: rgba(0, 0, 0, 0.55);
+    box-shadow: 0 0 14px rgba(var(--term-light-rgb), 0.5);
+}
+
+.compare-name {
+    position: absolute;
+    bottom: 0.5em;
+    padding: 0.1em 0.5em;
+    font-family: 'VT323', monospace;
+    font-size: var(--canvas-text, 0.9rem);
+    letter-spacing: 0.08em;
+    color: var(--term-light);
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(var(--term-light-rgb), 0.3);
+    pointer-events: none;
+    opacity: 0.75;
+}
+
+.compare-name.left { left: 0.5em; }
+.compare-name.right { right: 0.5em; }
+
+/* Arranging is about where the work sits. A press on it there takes hold of the
+   work, not of the line, so nothing here answers the pointer. */
+.is-arranging .compare-wrap { cursor: inherit; }
+.is-arranging .compare-name { opacity: 0; }
+
+
+/* --- GALLERY ----------------------------------------------------------------
+   Several pictures held as one work. It takes one place in the strip and one
+   slot on a hand-placed canvas, and the reader steps through it where it is. */
+/* A frame, not a picture: it is a box you set the size of, and whatever it is
+   showing is fitted inside. That is what lets a set of pictures that are not
+   all the same shape sit in one place without the arrangement moving as the
+   reader steps through them. */
+.work-slide.is-gallery {
+    background: #000;
+    border: 1px solid rgba(var(--term-light-rgb), 0.3);
+}
+
+/* The frames are laid in a strip across the frame and the strip is what moves.
+   The one you are on sits in the middle with the same sliver of its neighbours
+   showing either side of it - those slivers are the only thing that says there
+   is more to see before anything has been pressed, and an even pair of them
+   reads as a set you are in the middle of rather than one pushed to one edge.
+   A frame at either end has an empty margin where its neighbour would be, which
+   is how the ends announce themselves. */
+.work-slide.is-gallery {
+    --reel-peek: 9%;
+    --reel-gap: 2%;
+    --cell: calc(100% - 2 * var(--reel-peek) - 2 * var(--reel-gap));
+}
+
+/* The window the strip runs past. The clipping is here and not on the slide:
+   the corner grip is drawn just outside the slide, and a slide that clipped
+   would swallow the handle you size the frame by. */
+.gallery-reel {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+}
+
+.gallery-track {
+    display: flex;
+    gap: var(--reel-gap);
+    height: 100%;
+    transition: transform 0.32s cubic-bezier(0.22, 0.61, 0.36, 1);
+    will-change: transform;
+}
+
+.gallery-cell {
+    position: relative;
+    flex: 0 0 var(--cell);
+    height: 100%;
+    background: #000;
+    /* Held back so the one you are on reads as the picture and the rest as
+       what is waiting either side of it */
+    opacity: 0.3;
+    transition: opacity 0.32s;
+    cursor: pointer;
+}
+
+.gallery-cell.is-showing {
+    opacity: 1;
+    cursor: zoom-in;
+}
+
+/* An embed swallows every press inside it, so a frame that is only peeking has
+   its contents made deaf. The cell itself then catches the press and brings
+   that frame round, which is what makes a set of videos steppable at all. */
+.gallery-cell:not(.is-showing) > * {
+    pointer-events: none;
+}
+
+.gallery-cell .work-media,
+.gallery-cell iframe {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    border: 0;
+}
+
+/* An arrow with nothing left that way says so rather than going nowhere */
+.gallery-step.is-spent {
+    opacity: 0.15 !important;
+    pointer-events: none;
+}
+
+/* On a hand-placed canvas a frame's height was dragged out, so it is set from
+   the placement rather than worked back from whatever it happens to hold */
+.feed-track.is-free .work-slide.is-gallery,
+.feed-track.is-free .work-slide.is-note,
+.feed-track.is-free .work-slide.is-spacer {
+    aspect-ratio: auto;
+}
+
+
+/* --- NOTES AND SPACERS -----------------------------------------------------
+   Furniture on the canvas. A note holds words - a heading, a date, a line of
+   explanation - and a spacer holds a gap, which is what keeps a composition
+   breathing and what lets the canvas run on past the lowest picture. Neither is
+   an asset, so neither takes a tile in the index or a place in the counter. */
+.work-slide.is-note {
+    background: rgba(var(--term-bg-rgb), 0.55);
+    border: 1px solid rgba(var(--term-light-rgb), 0.25);
+    opacity: 1;
+    /* Deliberately not clipped here. The corner grip is drawn just outside this
+       box, and a slide that clips would both hide it and put a scrollbar over
+       the very corner you have to take hold of to size the note. The words are
+       kept inside by the block below instead. */
+}
+
+.note-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 0.65em 0.75em;
+    overflow: hidden;
+    font-family: 'VT323', monospace;
+    color: var(--term-light);
+    /* A share of the canvas, times the size chosen in the manager. Everything
+       inside is in em, so the note scales as one piece - and it is the same
+       share the captions use, so words are one size wherever they appear. */
+    font-size: calc(var(--canvas-text, 1.05rem) * var(--note-scale, 1));
+}
+
+.note-body b {
+    letter-spacing: 0.12em;
+    font-size: 1.15em;
+}
+
+.note-body span {
+    /* Whatever was typed, laid out the way it was typed */
+    white-space: pre-wrap;
+    line-height: 1.4;
+    opacity: 0.85;
+}
+
+/* A spacer is a gap, and a gap has nothing to show. It is only ever seen while
+   arranging, where there has to be something to take hold of. */
+.work-slide.is-spacer { visibility: hidden; }
+
+.is-arranging .work-slide.is-spacer {
+    visibility: visible;
+    border: 1px dashed rgba(var(--term-light-rgb), 0.4);
+    background: repeating-linear-gradient(
+        45deg,
+        transparent, transparent 7px,
+        rgba(var(--term-light-rgb), 0.08) 7px, rgba(var(--term-light-rgb), 0.08) 14px);
+}
+
+/* Their places in the index and the seek row are kept so the lists stay in step
+   with the works, and hidden because there is nothing there to go to */
+.rail-thumb[hidden],
+.seek-ticks span[hidden] { display: none; }
+
+.gallery-step {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 6;
+    padding: 5px 7px;
+    font-family: 'VT323', monospace;
+    font-size: 1rem;
+    letter-spacing: 1px;
+    color: var(--term-light);
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(var(--term-light-rgb), 0.4);
+    cursor: pointer;
+    /* Out of the way until the work is the one being read */
+    opacity: 0;
+    transition: opacity 0.2s, background 0.2s;
+}
+
+.gallery-step.prev { left: 8px; }
+.gallery-step.next { right: 8px; }
+
+.work-slide.is-gallery.is-active .gallery-step,
+.work-slide.is-gallery:hover .gallery-step { opacity: 0.7; }
+
+.gallery-step:hover {
+    opacity: 1;
+    background: rgba(var(--term-light-rgb), 0.25);
+}
+
+.gallery-count {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    z-index: 6;
+    padding: 1px 7px;
+    font-family: 'VT323', monospace;
+    font-size: 0.85rem;
+    letter-spacing: 1px;
+    color: var(--term-light);
+    background: rgba(0, 0, 0, 0.65);
+    border: 1px solid rgba(var(--term-light-rgb), 0.35);
+}
+
+/* Arranging is about where the work sits, not which picture it is showing */
+.is-arranging .gallery-step,
+.is-arranging .gallery-count { pointer-events: none; opacity: 0; }
+
+/* The static grid behind the console, which is what a reader with no JS gets:
+   no stepping there, so the set is simply laid out. */
+.gallery-frames {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+}
+
+
+/* --- ARRANGE MODE ----------------------------------------------------------
+   Only ever on when the manager opens the page with ?edit=1. It adds the grips
+   and the drop marker and nothing else, so what is being dragged around is the
+   finished page rather than a stand-in for it. */
+.is-arranging .work-slide {
+    cursor: grab;
+    outline: 1px dashed rgba(var(--term-light-rgb), 0.35);
+    outline-offset: 2px;
+}
+
+.is-arranging .work-slide:hover {
+    outline-color: rgba(var(--term-light-rgb), 0.85);
+}
+
+.is-arranging .work-slide.is-dragging {
+    opacity: 0.35;
+    cursor: grabbing;
+}
+
+/* Picked out for the align buttons to act on. Solid where the resting outline
+   is dashed, so which works a button is about to move is never in doubt. */
+.is-arranging .work-slide.is-picked {
+    outline: 2px solid var(--term-light);
+    outline-offset: 3px;
+    box-shadow: 0 0 14px rgba(var(--term-light-rgb), 0.35);
+}
+
+/* Where it will land if dropped now */
+.is-arranging .work-slide.is-drop-target {
+    outline: 2px solid var(--term-light);
+    outline-offset: 3px;
+    box-shadow: 0 0 18px rgba(var(--term-light-rgb), 0.5);
+}
+
+/* The pictures are the thing being arranged; dragging one must not turn into
+   the browser's own image drag */
+.is-arranging .work-media {
+    pointer-events: none;
+    -webkit-user-drag: none;
+}
+
+
+/* --- HAND-PLACED CANVAS -----------------------------------------------------
+   Works sit where they were put rather than where a layout decided. Positions
+   are fractions of the canvas width, applied in pixels from JS, so the whole
+   arrangement scales as one piece: it keeps its proportions on a small screen
+   instead of coming apart, though everything is smaller there. */
+.feed-track.is-free {
+    position: relative;
+    display: block;
+    width: 100%;
+    /* Height comes from JS - it has to reach past the lowest work */
+}
+
+.feed-track.is-free .work-slide {
+    position: absolute;
+    margin: 0;
+    max-width: none;
+    height: auto;
+    aspect-ratio: var(--ar, 16 / 9);
+    opacity: 1;
+}
+
+.feed-track.is-free .work-media {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    max-height: none;
+}
+
+/* On a hand-placed canvas a work carries only what was written about it: no
+   name and no rule above it. The name is already in the panel beside the work,
+   and a line ruled under every single work is a line nobody placed there - on a
+   canvas arranged by hand that is somebody else's mark on your composition.
+   Anything with nothing written about it says nothing at all. */
+.feed-track.is-free .work-note {
+    display: block;
+    width: auto;
+    min-width: 0;
+    border-top: 0;
+    padding-top: 0;
+    /* A share of the canvas, like the picture it belongs to. Its spacing is in
+       em so the whole caption shrinks together rather than keeping a fixed gap
+       around ever-smaller words. */
+    font-size: var(--canvas-text, 1rem);
+    margin-top: 0.5em;
+}
+
+.feed-track.is-free .work-note b { display: none; }
+
+.feed-track.is-free .work-note.is-bare { display: none; }
+
+.feed-track.is-free .work-note span { font-size: 1em; margin-top: 0; }
+
+/* A grip on the corner, shown only while arranging */
+.is-arranging .feed-track.is-free .work-slide::after,
+.is-arranging .feed-track.is-vertical .work-slide::after {
+    content: "";
+    position: absolute;
+    right: -6px;
+    bottom: -6px;
+    width: 16px;
+    height: 16px;
+    border-right: 3px solid var(--term-light);
+    border-bottom: 3px solid var(--term-light);
+    cursor: nwse-resize;
+    filter: drop-shadow(0 0 5px rgba(var(--term-light-rgb), 0.8));
+}
+
+/* Lines showing what a work has just lined up with */
+.snap-guide {
+    position: absolute;
+    background: #ffd479;
+    box-shadow: 0 0 6px rgba(255, 212, 121, 0.9);
+    pointer-events: none;
+    z-index: 40;
+}
+
+.snap-guide.v { width: 1px; top: 0; bottom: 0; }
+.snap-guide.h { height: 1px; left: 0; right: 0; }
+
+
+/* --- CONSOLE RESPONSIVE --- */
+@media (max-width: 1000px) {
+    /* The panel cannot share one screen with the window at this width, so it
+       goes above and the two of them split the frame's height between them */
+    .console-body {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
+        gap: 10px;
+    }
+
+    .console-stage {
+        padding: 8px;
+        gap: 8px;
+    }
+
+    /* Specs and the file readout sit side by side under the rail, which is
+       what keeps the panel short enough to leave the window most of the screen */
+    .console-panel {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-content: start;
+        gap: 10px;
+    }
+
+    .index-block {
+        grid-column: 1 / -1;
+        flex: none;
+    }
+
+    .thumb-rail {
+        grid-template-columns: none;
+        grid-auto-flow: column;
+        grid-auto-columns: 68px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding-bottom: 6px;
+        padding-right: 0;
+    }
+
+    /* The readout sits on one line here, so it needs no reserved space */
+    .desc-body {
+        min-height: 0;
+    }
+
+    /* Tighter spacing: the window is a lot narrower once it spans the screen */
+    .feed-track {
+        --strip-gap: 8px;
+    }
+}
+
+@media (max-width: 560px) {
+
+    .work-head {
+        font-size: 0.95rem;
+        padding: 5px 8px;
+    }
+
+    .work-view {
+        padding: 8px;
+    }
+
+    .desc-body {
+        font-size: 1rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sig-bar s,
+    .hud-blink {
+        animation: none;
+    }
 }

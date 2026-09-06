@@ -78,7 +78,21 @@ const categoryHoverGuard = {
     anchorX: 0,
     anchorY: 0
 };
-const TAPE_PREVIEW_MAX_IMAGES = 3;
+const TAPE_PREVIEW_MAX_IMAGES = 4;
+
+/* An embed will run without being asked so long as it is silent, so a chosen
+   video can play in the strip rather than sit there as a still. What it costs
+   is a player - about a megabyte of somebody else's script - and a second or so
+   before a frame appears. Sweeping the pointer along a shelf of tapes would
+   fetch one for every tape passed over, so nothing is fetched until a hover has
+   lasted long enough to look like somebody meaning to look. */
+const TAPE_PREVIEW_PLAY_DELAY_MS = 450;
+let tapePreviewPlayTimers = [];
+
+function cancelTapePreviewPlayers() {
+    tapePreviewPlayTimers.forEach((timer) => clearTimeout(timer));
+    tapePreviewPlayTimers = [];
+}
 const tapePreviewCache = new Map();
 let tapePreviewRequestToken = 0;
 
@@ -139,7 +153,6 @@ function getInitialFilteredScroll() {
 
     const { radius, count } = cachedConfig;
     if (filteredTapeIndices.length > count) {
-        // Start at the first full window: 0..(count-1), with radius as center.
         return radius;
     }
 
@@ -176,6 +189,7 @@ function clearTapePreviewUi() {
 }
 
 function renderTapePreviewStatus(className, text) {
+    cancelTapePreviewPlayers();
     if (!tapePreviewStripEl) return;
 
     const status = document.createElement('span');
@@ -184,58 +198,151 @@ function renderTapePreviewStatus(className, text) {
     tapePreviewStripEl.replaceChildren(status);
 }
 
-function renderTapePreviewImages(imageUrls) {
+function renderTapePreviewImages(shots) {
     if (!tapePreviewStripEl) return;
+    cancelTapePreviewPlayers();
 
-    const validUrls = Array.isArray(imageUrls)
-        ? imageUrls.filter((src) => typeof src === 'string' && src.trim().length > 0)
+    const validShots = Array.isArray(shots)
+        ? shots.filter((shot) => shot && typeof shot.src === 'string' && shot.src.trim().length > 0)
         : [];
 
-    if (validUrls.length <= 0) {
+    if (validShots.length <= 0) {
         renderTapePreviewStatus('tape-preview-empty', 'NO PREVIEW IMAGES FOUND');
         return;
     }
 
-    const previewNodes = validUrls.slice(0, TAPE_PREVIEW_MAX_IMAGES).map((src, index) => {
+    const previewNodes = validShots.slice(0, TAPE_PREVIEW_MAX_IMAGES).map((shot, index) => {
+        /* Every frame is the same height and each is as wide as its own picture
+           wants, so the row lines up top and bottom without a single picture
+           being cropped to fit somebody else's shape. */
         const frame = document.createElement('figure');
         frame.className = 'tape-preview-thumb';
+        if (shot.w > 0 && shot.h > 0) {
+            frame.style.setProperty('--shot', shot.w + ' / ' + shot.h);
+        }
+
+        /* A clip runs where a still would sit: silent, looping, and only ever
+           while the strip is on screen - the strip is thrown away when the tape
+           is left, and the clip goes with it. */
+        if (shot.motion) {
+            const clip = document.createElement('video');
+            clip.src = shot.src;
+            if (shot.poster) clip.poster = shot.poster;
+            clip.muted = true;
+            clip.loop = true;
+            clip.autoplay = true;
+            clip.playsInline = true;
+            clip.preload = 'metadata';
+            clip.setAttribute('aria-label', `Preview ${index + 1}`);
+            frame.appendChild(clip);
+            return frame;
+        }
 
         const img = document.createElement('img');
-        img.src = src;
+        img.src = shot.src;
         img.alt = `Preview ${index + 1}`;
         img.loading = 'lazy';
         img.decoding = 'async';
 
+        /* The big still is only kept for a video uploaded at 720 or better, so
+           the small one stands in when it is missing. */
+        if (shot.small) {
+            img.addEventListener('error', () => {
+                if (img.src !== shot.small) img.src = shot.small;
+            }, { once: true });
+        }
+
         frame.appendChild(img);
+
+        // An embed is a video, and a still of one should not pretend otherwise
+        if (shot.play) {
+            const mark = Object.assign(document.createElement('span'), {
+                className: 'tape-preview-play',
+                textContent: '▶'
+            });
+            frame.appendChild(mark);
+
+            /* Silent, looping and stripped of everything a player usually
+               brings, since this is a preview and not somewhere to watch. The
+               still stays underneath, so the frame is never empty while the
+               player is on its way. */
+            if (shot.id) {
+                tapePreviewPlayTimers.push(setTimeout(() => {
+                    if (!frame.isConnected) return;
+
+                    const player = document.createElement('iframe');
+                    player.src = 'https://www.youtube.com/embed/' + shot.id
+                        + '?autoplay=1&mute=1&controls=0&loop=1&playlist=' + shot.id
+                        + '&playsinline=1&rel=0&iv_load_policy=3&modestbranding=1';
+                    player.title = `Preview ${index + 1}`;
+                    player.setAttribute('frameborder', '0');
+                    player.allow = 'autoplay; encrypted-media';
+                    frame.appendChild(player);
+                    mark.remove();
+                }, TAPE_PREVIEW_PLAY_DELAY_MS));
+            }
+        }
+
         return frame;
     });
 
     tapePreviewStripEl.replaceChildren(...previewNodes);
 }
 
-function extractPreviewImageUrlsFromPage(htmlText, pageUrl) {
+function extractPreviewShotsFromPage(htmlText, pageUrl) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlText, 'text/html');
-    const imageEls = Array.from(doc.querySelectorAll('img[src]'));
-    const uniqueUrls = [];
+    const shots = [];
+    const seen = new Set();
+
+    /* One clip, and only the first. A project's own footage says more about it
+       in a second than four stills do - but a hover is a glance, and loading
+       every clip a page holds to answer one would cost more than the whole page
+       it is previewing. Everything else in the strip stays a still. */
+    const clipEl = doc.querySelector('.project-grid video[src]');
+    if (clipEl) {
+        const rawClip = clipEl.getAttribute('src');
+        const rawPoster = clipEl.getAttribute('poster') || clipEl.getAttribute('data-thumb');
+        try {
+            const resolvedUrl = new URL(rawClip, pageUrl).href;
+            seen.add(resolvedUrl);
+            shots.push({
+                src: resolvedUrl,
+                motion: true,
+                // Shown while the clip is still arriving, so the frame is never empty
+                poster: rawPoster ? new URL(rawPoster, pageUrl).href : ''
+            });
+        } catch {
+            // Ignore a malformed clip path and carry on with the stills.
+        }
+    }
+
+    /* Only the project's own works. Without the scope this also picks up the
+       related-archive cards at the foot of the page, so a project with nothing
+       in it yet would preview somebody else's images. */
+    const imageEls = Array.from(doc.querySelectorAll('.project-grid img[src]'));
 
     imageEls.forEach((imageEl) => {
-        if (uniqueUrls.length >= TAPE_PREVIEW_MAX_IMAGES) return;
+        if (shots.length >= TAPE_PREVIEW_MAX_IMAGES) return;
 
-        const rawSrc = imageEl.getAttribute('src');
+        /* The small copy where there is one. These frames are a couple of hundred
+           pixels across, and the page's own src is the full strip copy - fetching
+           four of those for a hover costs about twenty times as much. */
+        const rawSrc = imageEl.getAttribute('data-thumb') || imageEl.getAttribute('src');
         if (!rawSrc || rawSrc.startsWith('data:')) return;
 
         try {
             const resolvedUrl = new URL(rawSrc, pageUrl).href;
-            if (!uniqueUrls.includes(resolvedUrl)) {
-                uniqueUrls.push(resolvedUrl);
+            if (!seen.has(resolvedUrl)) {
+                seen.add(resolvedUrl);
+                shots.push({ src: resolvedUrl });
             }
         } catch {
             // Ignore malformed image paths in project pages.
         }
     });
 
-    return uniqueUrls;
+    return shots;
 }
 
 async function getProjectPreviewImages(projectUrl) {
@@ -260,7 +367,7 @@ async function getProjectPreviewImages(projectUrl) {
         })
         .then((htmlText) => {
             if (!htmlText) return [];
-            return extractPreviewImageUrlsFromPage(htmlText, pageUrl);
+            return extractPreviewShotsFromPage(htmlText, pageUrl);
         })
         .catch(() => []);
 
@@ -271,14 +378,24 @@ async function getProjectPreviewImages(projectUrl) {
 async function showTapePreviewForProject(projectInfo) {
     if (!tapePreviewStripEl) return;
 
+    /* Worked out when the site was built, and chosen by hand where anybody
+       chose. The index used to answer a hover by fetching the whole project
+       page and reading it, which meant a wait on the first hover over every
+       tape; this is already here. */
+    if (Array.isArray(projectInfo?.preview) && projectInfo.preview.length) {
+        tapePreviewRequestToken += 1;
+        renderTapePreviewImages(projectInfo.preview);
+        return;
+    }
+
     const nextToken = tapePreviewRequestToken + 1;
     tapePreviewRequestToken = nextToken;
     renderTapePreviewStatus('tape-preview-loading', 'SCANNING PROJECT FOLDER...');
 
-    const imageUrls = await getProjectPreviewImages(projectInfo?.url);
+    const shots = await getProjectPreviewImages(projectInfo?.url);
     if (nextToken !== tapePreviewRequestToken) return;
 
-    renderTapePreviewImages(imageUrls);
+    renderTapePreviewImages(shots);
 }
 
 function armCategoryHoverGuard() {
@@ -304,6 +421,16 @@ function setActiveCategory(nextCategory, { playUiSound = true } = {}) {
     if (normalizedCategory === activeCategory) return;
 
     activeCategory = normalizedCategory;
+
+    tapes.forEach(tape => {
+        const oldFilteredOrder = filteredOrderByTapeIndex.get(tape.userData.index);
+        tape.userData.preFilterX = typeof oldFilteredOrder === 'number'
+            ? (oldFilteredOrder - state.currentScroll) * tapeSpacing
+            : tape.position.x;
+    });
+
+    const prevFilteredIndexSet = new Set(filteredTapeIndices);
+
     rebuildFilteredTapeLookup();
 
 // Reset outgoing tapes so filter transitions don't show split-second flip artifacts.
@@ -314,9 +441,6 @@ function setActiveCategory(nextCategory, { playUiSound = true } = {}) {
             return;
         }
 
-        // Instantly hide and park above the lane so re-entry animates downward.
-        tape.userData.filterBlend = 0; 
-        tape.position.y = 0.4 + FILTER_HIDE_LIFT_Y;
         tape.position.z = 0;
 
         const hov = tape.userData?.action1;
@@ -332,9 +456,36 @@ function setActiveCategory(nextCategory, { playUiSound = true } = {}) {
 
         tape.rotation.set(0, 0, 0);
     });
-    const nextScroll = getInitialFilteredScroll();
 
-    state.currentScroll = nextScroll;
+    const groupCenter = getInitialFilteredScroll();
+    filteredTapeIndices.forEach((tapeIndex, filteredOrder) => {
+        const tape = tapes[tapeIndex];
+        if (!tape) return;
+        const wasInPrevCategory = prevFilteredIndexSet.has(tapeIndex);
+        tape.userData.filterGroupX = (filteredOrder - groupCenter) * tapeSpacing;
+        if (wasInPrevCategory) {
+            tape.userData.filterEntryDone = true;
+            tape.userData.filterSlideStartX = tape.userData.preFilterX ?? tape.position.x;
+        } else {
+            tape.userData.filterBlend = 0;
+            tape.userData.filterEntryDone = false;
+            tape.userData.filterSlideStartX = tape.userData.filterGroupX;
+            tape.position.y = 0.4 + FILTER_HIDE_LIFT_Y;
+        }
+    });
+
+    const hasPreSlide = filteredTapeIndices.some((tapeIndex) => {
+        const tape = tapes[tapeIndex];
+        return tape?.userData.filterEntryDone &&
+            Math.abs((tape.userData.filterSlideStartX ?? 0) - (tape.userData.filterGroupX ?? 0)) > 0.02;
+    });
+
+    filterHasPreSlide = hasPreSlide;
+    filterSlideProgress = 0;
+    filterSlidePendingStart = false;
+    filterAnimationPhase = 'lifting';
+
+    const nextScroll = getInitialFilteredScroll();
     state.targetScroll = nextScroll;
 
     state.activeTape = null;
@@ -782,13 +933,30 @@ const TAPE_HIGHLIGHT = {
 };
 const TAPE_HIGHLIGHT_COLOR = new THREE.Color(0xffffff);
 const TAPE_TMP_COLOR = new THREE.Color();
-const FILTER_HIDE_LIFT_Y = 1.25;
-const FILTER_BLEND_SPEED = 0.12;
+const FILTER_HIDE_LIFT_Y = 3.8;
+const FILTER_BLEND_SPEED = 0.06;
 const FILTER_RENDER_EPSILON = 0.02;
 const FILTER_OUT_RENDER_EPSILON = 0.08;
 const FILTER_OUT_OPACITY_EXPONENT = 2.0;
 const HOVER_FALLBACK_MAX_DIST_X = 0.2;
 const HOVER_FALLBACK_MAX_DIST_Y = 0.4;
+const FILTER_ENTRY_STAGGER_MS = 90;
+const FILTER_DESCEND_SPEED = 0.07;
+const FILTER_SLIDE_SPEED = 0.08;
+let filterAnimationPhase = 'settled';
+let filterSlideProgress = 0;
+let filterSlidePendingStart = false;
+let filterHasPreSlide = false;
+
+function startFilterEnteringPhase(startTime) {
+    let enterOrder = 0;
+    filteredTapeIndices.forEach((tapeIndex) => {
+        const tape = tapes[tapeIndex];
+        if (!tape || tape.userData.filterEntryDone) return;
+        tape.userData.filterEntryStartAt = startTime + enterOrder * FILTER_ENTRY_STAGGER_MS;
+        enterOrder++;
+    });
+}
 
 
 // --- 2. SEQUENCE BACKGROUND SETUP ---
@@ -797,7 +965,7 @@ const SEQUENCE = {
     start: 1,
     end: 120,
     pad: 4,
-    ext: 'jpg',
+    ext: 'webp',
     total: 120
 };
 
@@ -806,7 +974,7 @@ const SEQUENCE_2 = {
     start: 1,
     end: 30,
     pad: 4,
-    ext: 'jpg',
+    ext: 'webp',
     total: 30
 };
 
@@ -815,7 +983,7 @@ const ABOUT_SEQUENCE = {
     start: 1,
     end: 60,
     pad: 4,
-    ext: 'jpg',
+    ext: 'webp',
     total: 60
 };
 
@@ -824,7 +992,7 @@ const CONTACT_SEQUENCE = {
     start: 1,
     end: 60,
     pad: 4,
-    ext: 'jpg',
+    ext: 'webp',
     total: 60
 };
 
@@ -1324,7 +1492,7 @@ const perfProfile = (() => {
     };
 })();
 
-const MOBILE_RENDER_SCALE = isCoarsePointerDevice ? 0.72 : 1;
+const MOBILE_RENDER_SCALE = isCoarsePointerDevice ? 0.85 : 1;
 
 function updateRendererResolution() {
     const renderWidth = Math.max(1, Math.floor(window.innerWidth * MOBILE_RENDER_SCALE));
@@ -1338,7 +1506,10 @@ renderer.shadowMap.enabled = !perfProfile.lowEnd;
 if (renderer.shadowMap.enabled) {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 }
-renderer.outputColorSpace = THREE.SRGBColorSpace;
+// three r129 predates outputColorSpace/SRGBColorSpace - that constant is undefined
+// here, so the assignment did nothing and the scene rendered without the sRGB
+// conversion, which is what made the tapes look dark.
+renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1;
 
@@ -1515,18 +1686,8 @@ function handleFinalLoadState() {
         camera.lookAt(0, 0.8, -10);
 
         setTimeout(() => {
-            const tapeToEject = tapes[tapeId];
-            if (tapeToEject) {
-                const flip = tapeToEject.userData.action2;
-                if (flip) {
-                    flip.reset();
-                    flip.time = flip.getClip().duration; 
-                    flip.timeScale = -1; 
-                    flip.play();
-                }
-            }
-            state.targetZoom = 0; 
-        }, 800);
+            state.targetZoom = 0;
+        }, 600);
 
     } else if (action && (action === "projects" || action === "home" || action === "contact" || action === "about")) {
         if (action === "projects" || action === "home") {
@@ -1543,14 +1704,349 @@ function handleFinalLoadState() {
 }
 
 // --- TAPE LOADER ---
+const TAPE_LABEL_MODELS = [
+    "models/tape_01.glb",
+    "models/tape_02.glb",
+    "models/tape_03.glb"
+];
+// Caveat first: Handodle draws its digits as decorative stamps, so "Project_01"
+// came out as a name followed by two dark blocks.
+const TAPE_LABEL_FONT_FAMILY = "'Caveat', 'VT323', monospace";
+const TAPE_LABEL_FONT_WEIGHT = "700";
+const TAPE_LABEL_INK = "#241f1c";
+const TAPE_LABEL_UP = new THREE.Vector3(0, 1, 0);
+const TAPE_LABEL_ALT_UP = new THREE.Vector3(0, 0, 1);
+// Which way every name runs down the spine. Flip to false to read bottom to top.
+const TAPE_LABEL_READS_DOWN = true;
+
+const TAPE_BOX_TEXTURES = [
+    "textures/tape_01.jpg",
+    "textures/tape_02.jpg",
+    "textures/tape_03.jpg",
+    "textures/tape_04.jpg",
+    "textures/tape_05.jpg",
+    "textures/tape_06.jpg",
+    "textures/tape_07.jpg"
+];
+
 const tapeLoader = new GLTFLoader(tapeManager);
-tapeLoader.load("models/tape.glb", gltf => {
+const tapeLabelLoader = new GLTFLoader(tapeManager);
+const tapeBoxTextureLoader = new THREE.TextureLoader(tapeManager);
+
+let tapeGltf = null;
+const tapeLabelGltfs = new Array(TAPE_LABEL_MODELS.length).fill(null);
+const tapeBoxTextures = new Array(TAPE_BOX_TEXTURES.length).fill(null);
+let tapeBoxTexturesSettled = 0;
+// Redraw hooks, replayed once the handwriting font finishes loading
+const tapeLabelTextDraws = [];
+
+// Stable per-tape pick: a project always wears the same sleeve and sticker, but the
+// row reads as random instead of cycling 1-2-3-1-2-3. The salt keeps the two picks
+// from lining up with each other.
+function pickTapeVariant(tapeIndex, salt, count) {
+    let x = Math.imul(tapeIndex + salt, 2654435761);
+    x ^= x >>> 15;
+    x = Math.imul(x, 2246822519);
+    x ^= x >>> 13;
+    return (x >>> 0) % count;
+}
+
+function pickTapeLabelIndex(tapeIndex, count) {
+    return pickTapeVariant(tapeIndex, 1, count);
+}
+
+function pickTapeBoxTexture(tapeIndex) {
+    const loaded = tapeBoxTextures.filter(Boolean);
+    if (!loaded.length) return null;
+    return loaded[pickTapeVariant(tapeIndex, 97, loaded.length)];
+}
+
+// The animation drives one node inside the tape, so the label has to hang off that
+// node (not the scene root) to travel with it.
+function getAnimatedTapeNode(root, animations) {
+    for (const clip of animations || []) {
+        for (const track of clip.tracks || []) {
+            const split = track.name.lastIndexOf('.');
+            if (split < 0) continue;
+            const node = root.getObjectByName(track.name.slice(0, split));
+            if (node) return node;
+        }
+    }
+    return root.children[0] || root;
+}
+
+function getTapeLabelMesh(labelRoot) {
+    let found = null;
+    labelRoot.traverse((child) => {
+        if (!found && child.isMesh) found = child;
+    });
+    return found;
+}
+
+// Read the writing frame off the UV mapping rather than the mesh axes: the texture's
+// U and V directions are the only thing the canvas is actually glued to, so this holds
+// however the sticker was exported - rotated, mirrored, or with transforms applied in
+// Blender, which moves the quad onto completely different local axes.
+function getTapeLabelTextFrame(mesh) {
+    const geometry = mesh.geometry;
+    const position = geometry.attributes.position;
+    const uv = geometry.attributes.uv;
+    if (!position || !uv) return null;
+
+    const index = geometry.index;
+    const i0 = index ? index.getX(0) : 0;
+    const i1 = index ? index.getX(1) : 1;
+    const i2 = index ? index.getX(2) : 2;
+
+    const p0 = new THREE.Vector3().fromBufferAttribute(position, i0);
+    const e1 = new THREE.Vector3().fromBufferAttribute(position, i1).sub(p0);
+    const e2 = new THREE.Vector3().fromBufferAttribute(position, i2).sub(p0);
+
+    const uv0 = new THREE.Vector2().fromBufferAttribute(uv, i0);
+    const d1 = new THREE.Vector2().fromBufferAttribute(uv, i1).sub(uv0);
+    const d2 = new THREE.Vector2().fromBufferAttribute(uv, i2).sub(uv0);
+
+    const det = d1.x * d2.y - d2.x * d1.y;
+    if (!det) return null;
+    const r = 1 / det;
+
+    mesh.updateWorldMatrix(true, false);
+    const basis = new THREE.Matrix3().setFromMatrix4(mesh.matrixWorld);
+
+    // World directions the texture's U (left to right) and V (top to bottom) run along
+    const uDir = e1.clone().multiplyScalar(d2.y * r).addScaledVector(e2, -d1.y * r).applyMatrix3(basis);
+    const vDir = e2.clone().multiplyScalar(d1.x * r).addScaledVector(e1, -d2.x * r).applyMatrix3(basis);
+    const uLength = uDir.length();
+    const vLength = vDir.length();
+    if (!uLength || !vLength) return null;
+
+    const normal = geometry.attributes.normal
+        ? new THREE.Vector3().fromBufferAttribute(geometry.attributes.normal, i0)
+            .applyMatrix3(new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld)).normalize()
+        : new THREE.Vector3().crossVectors(uDir, vDir).normalize();
+
+    uDir.normalize();
+    vDir.normalize();
+
+    // Where right and down are for someone looking straight at the sticker
+    const up = Math.abs(normal.dot(TAPE_LABEL_UP)) > 0.99 ? TAPE_LABEL_ALT_UP : TAPE_LABEL_UP;
+    const screenRight = new THREE.Vector3().crossVectors(normal.clone().negate(), up).normalize();
+    const screenDown = new THREE.Vector3().crossVectors(screenRight, normal).normalize();
+
+    const rx = uDir.dot(screenRight);
+    const ry = uDir.dot(screenDown);
+    const dx = vDir.dot(screenRight);
+    const dy = vDir.dot(screenDown);
+
+    // Mirroring a sticker to make it readable also reverses which end the writing
+    // starts from, so the two have to be decided together - otherwise a mirrored
+    // sticker ends up running down the spine while the others run up it.
+    const mirrored = (rx * dy - ry * dx) < 0;
+    const runsDown = (mirrored ? -ry : ry) > 0;
+
+    return {
+        aspect: uLength / vLength,  // texel shape, so the writing never stretches
+        mirrored,
+        flipped: TAPE_LABEL_READS_DOWN ? !runsDown : runsDown
+    };
+}
+
+// Each sticker is a torn scrap floating inside its quad, so read the alpha mask to
+// find where the paper actually is and keep the writing on it.
+function getTapeLabelInkArea(material) {
+    const fallback = { x: 0.5, y: 0.5, width: 0.7, height: 0.4 };
+    const image = material && material.map && material.map.image;
+    if (!image || !image.width || !image.height) return fallback;
+
+    try {
+        const sample = 128;
+        const canvas = document.createElement("canvas");
+        canvas.width = sample;
+        canvas.height = sample;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(image, 0, 0, sample, sample);
+        const data = ctx.getImageData(0, 0, sample, sample).data;
+
+        let minX = sample, minY = sample, maxX = -1, maxY = -1;
+        for (let y = 0; y < sample; y++) {
+            for (let x = 0; x < sample; x++) {
+                if (data[(y * sample + x) * 4 + 3] < 200) continue;
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+        }
+        if (maxX < minX || maxY < minY) return fallback;
+
+        // Hold back from the torn edge so no letter runs off the paper
+        const inset = 0.12;
+        return {
+            x: (minX + maxX + 1) / 2 / sample,
+            y: (minY + maxY + 1) / 2 / sample,
+            width: ((maxX - minX + 1) / sample) * (1 - inset * 2),
+            height: ((maxY - minY + 1) / sample) * (1 - inset * 2)
+        };
+    } catch (err) {
+        // Tainted or undecodable image - fall back to a safe centred box
+        return fallback;
+    }
+}
+
+function createTapeLabelTextTexture(text, aspect, orientation, seed, area) {
+    // 512 is roughly double what the sticker ever covers on screen, and every tape
+    // carries its own copy of this canvas
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = Math.max(48, Math.round(512 / Math.max(aspect, 0.001)));
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.flipY = false; // glTF UVs start at the top left, same as the canvas
+    // Same colour space the loader gives the paper texture, so the ink is the tone it was written in
+    texture.encoding = THREE.sRGBEncoding;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = false;
+    texture.anisotropy = 4;
+
+    // A degree of wobble either way, so the row does not look machine printed
+    const tilt = (((seed * 37) % 100) / 100 - 0.5) * 2.4 * (Math.PI / 180);
+
+    const draw = () => {
+        const ctx = canvas.getContext("2d");
+        const w = canvas.width;
+        const h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        if (!text) return;
+
+        let fontSize = Math.max(12, Math.round(area.height * h * 0.72));
+        const maxWidth = area.width * w;
+        ctx.font = `${TAPE_LABEL_FONT_WEIGHT} ${fontSize}px ${TAPE_LABEL_FONT_FAMILY}`;
+        while (fontSize > 10 && ctx.measureText(text).width > maxWidth) {
+            fontSize -= 2;
+            ctx.font = `${TAPE_LABEL_FONT_WEIGHT} ${fontSize}px ${TAPE_LABEL_FONT_FAMILY}`;
+        }
+
+        ctx.save();
+        ctx.translate(area.x * w, area.y * h);
+        if (orientation.flipped) ctx.rotate(Math.PI);
+        if (orientation.mirrored) ctx.scale(-1, 1);
+        ctx.rotate(tilt);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = TAPE_LABEL_INK;
+        ctx.globalAlpha = 0.92;
+        ctx.fillText(text, 0, 0);
+        ctx.restore();
+
+        texture.needsUpdate = true;
+    };
+
+    tapeLabelTextDraws.push(draw);
+    draw();
+
+    return texture;
+}
+
+// The project name, written on the sticker as a second quad sharing its geometry
+function addTapeLabelText(labelRoot, tape, text) {
+    const mesh = getTapeLabelMesh(labelRoot);
+    if (!mesh || !text) return null;
+
+    const frame = getTapeLabelTextFrame(mesh);
+    if (!frame) return null;
+
+    const paperMaterial = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+    const inkArea = getTapeLabelInkArea(paperMaterial);
+    const texture = createTapeLabelTextTexture(text, frame.aspect, frame, tape.userData.index, inkArea);
+
+    const material = new THREE.MeshStandardMaterial({
+        map: texture,
+        transparent: true,
+        roughness: 0.95,
+        metalness: 0,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2
+    });
+    material.userData.keepTransparent = true;
+    material.userData.baseColor = material.color.clone();
+
+    // Same quad, same transform - it just rides a hair in front in draw order
+    const textMesh = new THREE.Mesh(mesh.geometry, material);
+    textMesh.name = "tape_label_text";
+    textMesh.position.copy(mesh.position);
+    textMesh.quaternion.copy(mesh.quaternion);
+    textMesh.scale.copy(mesh.scale);
+    textMesh.frustumCulled = false;
+    textMesh.castShadow = false;
+    textMesh.receiveShadow = false;
+    textMesh.renderOrder = 3;
+
+    mesh.parent.add(textMesh);
+    tape.userData.highlightMats.push(material);
+
+    return textMesh;
+}
+
+function prepareTapeLabel(labelRoot, tape) {
+    labelRoot.traverse((child) => {
+        if (!child.isMesh) return;
+
+        child.frustumCulled = false;
+        // An alpha-blended decal would cast a solid rectangle, so keep it out of the shadow pass
+        child.castShadow = false;
+        child.receiveShadow = false;
+        child.renderOrder = 2;
+
+        // clone() shares materials, so give every tape its own copy to tint
+        if (Array.isArray(child.material)) {
+            child.material = child.material.map(m => m.clone());
+        } else if (child.material) {
+            child.material = child.material.clone();
+        }
+
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        mats.forEach((mat) => {
+            if (!mat) return;
+            if (!mat.userData) mat.userData = {};
+
+            // Marks the label so the per-frame "force opaque" pass leaves its alpha alone
+            mat.userData.keepTransparent = true;
+
+            // It is modelled flush with the spine face, so bias it out of z-fighting
+            mat.polygonOffset = true;
+            mat.polygonOffsetFactor = -1;
+            mat.polygonOffsetUnits = -1;
+            mat.depthWrite = false;
+
+            if (mat.color && !mat.userData.baseColor) {
+                mat.userData.baseColor = mat.color.clone();
+            }
+            if (typeof mat.emissiveIntensity === 'number' && typeof mat.userData.baseEmissiveIntensity !== 'number') {
+                mat.userData.baseEmissiveIntensity = mat.emissiveIntensity;
+            }
+            mat.needsUpdate = true;
+
+            // Joins the highlight list so the label dims and brightens with its tape
+            if (!tape.userData.highlightMats.includes(mat)) {
+                tape.userData.highlightMats.push(mat);
+            }
+        });
+    });
+}
+
+function buildTapes() {
     for (let i = 0; i < numTapes; i++) {
-        const tape = gltf.scene.clone();
+        const tape = tapeGltf.scene.clone();
         const mixer = new THREE.AnimationMixer(tape);
 
-        let action1 = gltf.animations[1] ? mixer.clipAction(gltf.animations[1]) : null;
-        let action2 = gltf.animations[0] ? mixer.clipAction(gltf.animations[0]) : null;
+        let action1 = tapeGltf.animations[1] ? mixer.clipAction(tapeGltf.animations[1]) : null;
+        let action2 = tapeGltf.animations[0] ? mixer.clipAction(tapeGltf.animations[0]) : null;
 
         if (action1) { action1.setLoop(THREE.LoopOnce); action1.clampWhenFinished = true; action1.timeScale = 1.0; }
         if (action2) { action2.setLoop(THREE.LoopOnce); action2.clampWhenFinished = true; action2.timeScale = 1.0; }
@@ -1566,8 +2062,11 @@ tapeLoader.load("models/tape.glb", gltf => {
             projectInfo: projectData[i],
             filteredOrder: -1,
             filterBlend: 1,
+            filterEntryDone: true,
             highlightMats: []
         };
+
+        const boxTexture = pickTapeBoxTexture(i);
 
         tape.traverse(c => {
             if (c.isMesh) {
@@ -1588,6 +2087,11 @@ tapeLoader.load("models/tape.glb", gltf => {
                     if (!tape.userData.highlightMats.includes(mat)) {
                         tape.userData.highlightMats.push(mat);
                     }
+                    // Swap in this tape's sleeve art. Only materials that already
+                    // carry artwork get one, so anything untextured is left alone.
+                    if (boxTexture && mat.map) {
+                        mat.map = boxTexture;
+                    }
                     mat.transparent = false;
                     mat.opacity = 1;
                     mat.depthWrite = true;
@@ -1603,10 +2107,76 @@ tapeLoader.load("models/tape.glb", gltf => {
             }
         });
 
+        // Parent the paper label to the animated node, keeping the offset it was
+        // authored with, so it rides along with every move of the tape.
+        const labelSource = tapeLabelGltfs[pickTapeLabelIndex(i, tapeLabelGltfs.length)];
+        if (labelSource) {
+            const label = labelSource.scene.clone(true);
+            label.name = "tape_label";
+            prepareTapeLabel(label, tape);
+            getAnimatedTapeNode(tape, tapeGltf.animations).add(label);
+            addTapeLabelText(label, tape, projectData[i] && projectData[i].title);
+            tape.userData.label = label;
+        }
+
         scene.add(tape);
         tapes.push(tape);
     }
+}
+
+// All four models feed the same loading manager, and the tapes are only assembled
+// once every one has arrived - whichever finishes last runs the build.
+const buildTapesWhenReady = () => {
+    if (!tapeGltf) return;
+    if (tapeLabelGltfs.some(gltf => !gltf)) return;
+    if (tapeBoxTexturesSettled < TAPE_BOX_TEXTURES.length) return;
+    buildTapes();
+};
+
+TAPE_BOX_TEXTURES.forEach((url, index) => {
+    tapeBoxTextureLoader.load(
+        url,
+        (texture) => {
+            // Match how GLTFLoader sets up a base colour map, or the artwork lands
+            // upside down (glTF UVs start top left) and in the wrong colour space
+            texture.flipY = false;
+            texture.encoding = THREE.sRGBEncoding;
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+            tapeBoxTextures[index] = texture;
+            tapeBoxTexturesSettled++;
+            buildTapesWhenReady();
+        },
+        undefined,
+        () => {
+            // A sleeve that fails to load just drops out of the pool - the tapes
+            // still build, wearing the artwork baked into the model
+            tapeBoxTexturesSettled++;
+            buildTapesWhenReady();
+        }
+    );
 });
+
+tapeLoader.load("models/tape.glb", gltf => {
+    tapeGltf = gltf;
+    buildTapesWhenReady();
+});
+
+TAPE_LABEL_MODELS.forEach((url, index) => {
+    tapeLabelLoader.load(url, gltf => {
+        tapeLabelGltfs[index] = gltf;
+        buildTapesWhenReady();
+    });
+});
+
+// The handwriting face may still be loading when the tapes are built, so redraw
+// the names once it lands.
+if (document.fonts) {
+    const refreshTapeLabelText = () => tapeLabelTextDraws.forEach(draw => draw());
+    document.fonts.load(`${TAPE_LABEL_FONT_WEIGHT} 64px ${TAPE_LABEL_FONT_FAMILY}`).then(refreshTapeLabelText).catch(() => {});
+    document.fonts.ready.then(refreshTapeLabelText).catch(() => {});
+}
 
 // --- 6. LOGIC & ROUTING ---
 window.handleSystemAction = handleSystemAction;
@@ -1618,14 +2188,19 @@ function handleSystemAction(action) {
 
     const isSectionAction = action === 'about' || action === 'contact';
 
-    // About/Contact should switch directly without replaying default 0-20 intro.
+    // About/Contact: if zoomed in on tapes, zoom out first then switch; otherwise switch immediately.
     if (isSectionAction) {
         pendingMenuAction = null;
         pendingScrollDelta = 0;
-        pendingSectionSequenceKey = null;
-        activateSectionSequence(action);
-        drawSequence(0);
-        state.targetZoom = 0;
+        if (activeSequenceKey === 'default' && (state.targetZoom > 0 || state.zoom > 0.03)) {
+            pendingSectionSequenceKey = action;
+            state.targetZoom = 0;
+        } else {
+            pendingSectionSequenceKey = null;
+            activateSectionSequence(action);
+            drawSequence(0);
+            state.targetZoom = 0;
+        }
         return;
     }
 
@@ -2286,15 +2861,26 @@ function animate() {
             && categoryValues.length > 0;
         categoryFilterBar.classList.toggle('visible', shouldShowCategoryFilter);
 
-        const shouldFadeCategoryFilter = !!state.activeTape && state.zoom > 0.9 && !state.isLocked && !hoverSuppressed;
+        /* Out of the way whenever a tape has the screen - hovered or clicked.
+           Leaving isLocked out of this brought the bar back the moment a tape was
+           opened, on top of the tape it had just been cleared for. */
+        const shouldFadeCategoryFilter = (state.isLocked || !!state.activeTape)
+            && state.zoom > 0.9
+            && !hoverSuppressed;
         categoryFilterBar.classList.toggle('hover-fade', shouldShowCategoryFilter && shouldFadeCategoryFilter);
     }
 
     // 3. APPLY DEFERRED SEQUENCE
-    // Only switch to About/Contact once the zoom-out animation has settled completely.
+    // Wait until both zoom state AND camera position have returned to idle —
+    // zoom lerps faster than the camera so checking only state.zoom fires too early.
     if (pendingSectionSequenceKey && state.targetZoom === 0 && state.zoom < 0.03) {
-        activateSectionSequence(pendingSectionSequenceKey);
-        pendingSectionSequenceKey = null;
+        const pendingCameraTravel = THREE.MathUtils.clamp(
+            (camera.position.z - POS_START.z) / (POS_END.z - POS_START.z), 0, 1
+        );
+        if (pendingCameraTravel <= 0.02) {
+            activateSectionSequence(pendingSectionSequenceKey);
+            pendingSectionSequenceKey = null;
+        }
     }
 
     // 4. SCROLL TAPES
@@ -2316,20 +2902,68 @@ function animate() {
             && tape.userData.filteredOrder >= center - radius
             && tape.userData.filteredOrder <= center + radius;
 
-        const filterLerpFactor = getFrameRateIndependentLerpFactor(FILTER_BLEND_SPEED, delta);
-        const targetFilterBlend = isInFilteredCategory ? 1 : 0;
+        let targetFilterBlend;
+        if (isInFilteredCategory) {
+            if (!tape.userData.filterEntryDone && filterAnimationPhase !== 'settled') {
+                if (filterAnimationPhase === 'entering' &&
+                    performance.now() >= (tape.userData.filterEntryStartAt ?? 0)) {
+                    targetFilterBlend = 1;
+                    if (tape.userData.filterBlend >= 0.99) {
+                        tape.userData.filterEntryDone = true;
+                        tape.userData.filterBlend = 1;
+                    }
+                } else {
+                    targetFilterBlend = 0; // hold above during pre-slide or while waiting for stagger
+                }
+            } else {
+                targetFilterBlend = 1;
+            }
+        } else {
+            targetFilterBlend = 0;
+        }
+
+        const filterLerpFactor = getFrameRateIndependentLerpFactor(
+            (isInFilteredCategory && !tape.userData.filterEntryDone) ? FILTER_DESCEND_SPEED : FILTER_BLEND_SPEED,
+            delta
+        );
         tape.userData.filterBlend = THREE.MathUtils.lerp(tape.userData.filterBlend, targetFilterBlend, filterLerpFactor);
         if (Math.abs(tape.userData.filterBlend - targetFilterBlend) < 0.002) {
             tape.userData.filterBlend = targetFilterBlend;
         }
 
         const filterBlend = THREE.MathUtils.clamp(tape.userData.filterBlend, 0, 1);
-        const shouldRenderTape = isInWindow || (!isInFilteredCategory && filterBlend > FILTER_OUT_RENDER_EPSILON);
+        // During animation, always render sliding tapes regardless of window position —
+        // the scroll is still lerping to the new center so filteredOrder-based culling
+        // would incorrectly hide tapes whose new index is outside the current window.
+        const isSlidingTape = isInFilteredCategory && tape.userData.filterEntryDone && filterAnimationPhase !== 'settled';
+        const shouldRenderTape = isSlidingTape || isInWindow || (!isInFilteredCategory && filterBlend > FILTER_OUT_RENDER_EPSILON);
         tape.visible = shouldRenderTape;
         if (!shouldRenderTape) return;
 
         if (isInFilteredCategory) {
-            tape.position.x = (tape.userData.filteredOrder - state.currentScroll) * tapeSpacing;
+            let x;
+            if (filterAnimationPhase === 'settled') {
+                x = (tape.userData.filteredOrder - state.currentScroll) * tapeSpacing;
+            } else if (filterAnimationPhase === 'pre-sliding') {
+                // Staying tapes slide to their final grouped positions.
+                // Entering tapes are held above (filterBlend=0) — X irrelevant but set to destination.
+                x = tape.userData.filterEntryDone
+                    ? THREE.MathUtils.lerp(
+                        tape.userData.filterSlideStartX ?? 0,
+                        tape.userData.filterGroupX ?? 0,
+                        filterSlideProgress
+                    )
+                    : (tape.userData.filterGroupX ?? 0);
+            } else if (filterAnimationPhase === 'lifting') {
+                // Staying tapes hold at their pre-transition position; entering tapes held above.
+                x = tape.userData.filterEntryDone
+                    ? (tape.userData.filterSlideStartX ?? tape.userData.filterGroupX ?? 0)
+                    : (tape.userData.filterGroupX ?? 0);
+            } else {
+                // entering phase: all tapes descending to filterGroupX
+                x = tape.userData.filterGroupX ?? 0;
+            }
+            tape.position.x = x;
             if (tape.userData.mixer) tape.userData.mixer.update(delta);
             visibleTapes.push(tape);
         }
@@ -2338,19 +2972,16 @@ function animate() {
         tape.position.y = THREE.MathUtils.lerp(tape.position.y, targetY, filterLerpFactor);
         tape.position.z = 0;
         
-        // --- THE NEW FIX ---
-        // Physically scale the tape down instead of making it transparent!
-        // This avoids all 3D glass/hollow glitches completely.
-        const scaleVal = Math.max(0.001, filterBlend); 
-        tape.scale.set(scaleVal, scaleVal, scaleVal);
+        tape.scale.setScalar(1);
 
         const mats = tape.userData.highlightMats || [];
         mats.forEach((mat) => {
             if (!mat) return;
             
-            // Lock the material so it is PERMANENTLY solid and opaque. 
+            // Lock the material so it is PERMANENTLY solid and opaque.
             // No more weird x-ray ghost tapes!
-            if (mat.transparent !== false) {
+            // (the paper label opts out - its alpha is the whole point of it)
+            if (mat.transparent !== false && !mat.userData.keepTransparent) {
                 mat.transparent = false;
                 mat.opacity = 1.0;
                 mat.depthWrite = true;
@@ -2372,6 +3003,49 @@ function animate() {
             }
         }
     });
+
+    // --- FILTER ANIMATION PHASE TRANSITIONS ---
+
+    // lifting: outgoing tapes fly up; staying tapes hold position; entering tapes wait above.
+    // When all outgoing tapes are invisible, advance to grouping or entry.
+    if (filterAnimationPhase === 'lifting') {
+        const allLifted = tapes.every((tape) => {
+            if (filteredOrderByTapeIndex.has(tape.userData?.index)) return true;
+            return !tape.visible;
+        });
+        if (allLifted) {
+            if (filterHasPreSlide) {
+                filterAnimationPhase = 'pre-sliding';
+            } else {
+                filterAnimationPhase = 'entering';
+                startFilterEnteringPhase(performance.now());
+            }
+        }
+    }
+
+    // pre-sliding: staying tapes move to their grouped positions; entering tapes held above.
+    // When complete, kick off the staggered entry.
+    if (filterAnimationPhase === 'pre-sliding') {
+        const slideLerpFactor = getFrameRateIndependentLerpFactor(FILTER_SLIDE_SPEED, delta);
+        filterSlideProgress = THREE.MathUtils.lerp(filterSlideProgress, 1, slideLerpFactor);
+        if (filterSlideProgress >= 0.999) {
+            filterSlideProgress = 1;
+            filterAnimationPhase = 'entering';
+            startFilterEnteringPhase(performance.now());
+        }
+    }
+
+    // entering: staggered descent. When all tapes are down, settle immediately.
+    if (filterAnimationPhase === 'entering' && !filterSlidePendingStart) {
+        const allEntered = filteredTapeIndices.every(i => tapes[i]?.userData.filterEntryDone);
+        if (allEntered && filteredTapeIndices.length > 0) {
+            filterSlidePendingStart = true;
+            filterAnimationPhase = 'settled';
+            const settledScroll = getInitialFilteredScroll();
+            state.currentScroll = settledScroll;
+            state.targetScroll = settledScroll;
+        }
+    }
 
     let hoveredTapeFromRay = null;
     if (state.zoom > 0.9 && !hoverSuppressed) {
@@ -2482,10 +3156,20 @@ function animate() {
                 if (hoverTitleEl) hoverTitleEl.innerText = data.title ? data.title.toUpperCase() : 'UNKNOWN_DATA';
                 if (hoverDescEl) hoverDescEl.innerText = data.shortDesc ? data.shortDesc : '';
                 hoverUI.classList.add('visible');
-                showTapePreviewForProject(data);
+                if (!isCoarsePointerDevice) showTapePreviewForProject(data);
             }
         }
         state.previousTape = state.activeTape;
+    }
+
+    /* Clicking a tape hands the screen over to it. The preview belongs to
+       browsing, so it should not still be sitting on top of the tape being
+       opened - and the block above cannot clear it, because that block only runs
+       while nothing is locked. */
+    if (state.isLocked && hoverUI?.classList.contains('visible')) {
+        hoverUI.classList.remove('visible');
+        clearTapePreviewUi();
+        state.previousTape = null;
     }
 
     

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\georg\\\\Desktop\\\\blender projects\\\\Personal_Projects\\\\Portfolio\\\\personal_website_02\" -Recurse -File | Where-Object { $_.Extension -match '\\\\.\\(html|css|js\\)$' } | Select-Object FullName)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\georg\\\\Desktop\\\\blender projects\\\\Personal_Projects\\\\Portfolio\\\\personal_website_02\" -File)",
+      "Bash(Select-Object Name)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\georg\\\\Desktop\\\\blender projects\\\\Personal_Projects\\\\Portfolio\\\\personal_website_02\" -Recurse -Filter \"*.html\" -File)",
+      "Bash(Select-Object FullName)"
+    ]
+  }
+}

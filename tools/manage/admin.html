@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARCHIVE MANAGER</title>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+:root {
+    --green: #c0e48c;
+    --green-dim: rgba(192, 228, 140, 0.45);
+    --line: rgba(192, 228, 140, 0.28);
+    --bg: #050805;
+    --panel: rgba(192, 228, 140, 0.04);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    background: var(--bg);
+    color: var(--green);
+    font-family: 'VT323', monospace;
+    font-size: 17px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+button, input, textarea, select { font-family: inherit; font-size: inherit; color: inherit; }
+
+header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--line);
+    flex: 0 0 auto;
+}
+header h1 { font-size: 1.1rem; font-weight: normal; letter-spacing: 2px; }
+header .spacer { flex: 1 1 auto; }
+#status { opacity: 0.6; font-size: 0.95rem; }
+#status.busy { opacity: 1; color: #ffd479; }
+#status.bad { opacity: 1; color: #ff8f8f; }
+#status.good { opacity: 1; }
+
+.btn {
+    background: rgba(192, 228, 140, 0.08);
+    border: 1px solid var(--line);
+    padding: 4px 12px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    white-space: nowrap;
+}
+.btn:hover { background: rgba(192, 228, 140, 0.18); }
+.btn:disabled { opacity: 0.35; cursor: default; }
+.btn.primary { border-color: var(--green); }
+.btn.danger:hover { background: rgba(255, 120, 120, 0.2); border-color: #ff8f8f; }
+
+main { flex: 1 1 auto; display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: 0; }
+
+/* --- project list --- */
+#projects { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+#projects .head { padding: 7px 12px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; }
+#projects .head span { flex: 1 1 auto; opacity: 0.55; letter-spacing: 2px; font-size: 0.85rem; }
+#project-list { flex: 1 1 auto; overflow-y: auto; }
+
+.p-item {
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(192, 228, 140, 0.12);
+    cursor: pointer;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+}
+.p-item:hover { background: var(--panel); }
+.p-item.sel { background: rgba(192, 228, 140, 0.14); box-shadow: inset 3px 0 0 var(--green); }
+.p-item .n { opacity: 0.4; font-size: 0.85rem; min-width: 20px; }
+.p-item .t { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-item .c { opacity: 0.45; font-size: 0.85rem; }
+.p-item.drag-over { box-shadow: inset 0 -2px 0 var(--green); }
+.p-item.dragging { opacity: 0.4; }
+
+/* --- editor --- */
+#editor { display: flex; flex-direction: column; min-height: 0; }
+#empty { padding: 30px; opacity: 0.5; }
+
+.fields {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 8px 14px;
+    flex: 0 0 auto;
+}
+label { display: flex; flex-direction: column; gap: 2px; }
+label i { font-style: normal; font-size: 0.78rem; letter-spacing: 1.5px; opacity: 0.45; }
+input, textarea {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--line);
+    padding: 3px 7px;
+    width: 100%;
+}
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--green); }
+textarea { resize: vertical; min-height: 46px; line-height: 1.25; }
+
+.meta-rows { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.meta-row { display: flex; gap: 4px; align-items: center; }
+.meta-row input { width: 110px; }
+.meta-row input.v { width: 130px; }
+.x {
+    background: none; border: 1px solid transparent; cursor: pointer;
+    opacity: 0.4; padding: 0 5px; line-height: 1.4;
+}
+.x:hover { opacity: 1; color: #ff8f8f; border-color: rgba(255, 143, 143, 0.5); }
+
+/* --- works --- */
+.works-head {
+    padding: 7px 14px;
+    border-bottom: 1px solid var(--line);
+    display: flex; gap: 10px; align-items: center;
+    flex: 0 0 auto;
+}
+.works-head span { opacity: 0.55; letter-spacing: 2px; font-size: 0.85rem; flex: 1 1 auto; }
+
+#works {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 12px 14px 60px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 12px;
+    align-content: start;
+}
+#works.drop { background: rgba(192, 228, 140, 0.07); outline: 2px dashed var(--green-dim); outline-offset: -8px; }
+
+.work {
+    border: 1px solid var(--line);
+    background: var(--panel);
+    display: flex;
+    flex-direction: column;
+}
+.work.dragging { opacity: 0.35; }
+.work .bar .pick { width: auto; margin: 0 2px 0 0; cursor: pointer; }
+.work .frames { display: flex; flex-wrap: wrap; gap: 3px; padding: 4px; background: #000; }
+.work .frame { position: relative; width: 54px; height: 54px; }
+.work .frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.work .frame .fn { position: absolute; left: 2px; bottom: 0; font-size: 0.7rem; opacity: 0.8; text-shadow: 0 0 3px #000; }
+.work .frame .fv { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; text-shadow: 0 0 4px #000; pointer-events: none; }
+.work .frame .fk { display: flex; align-items: center; justify-content: center; height: 100%; opacity: 0.5; font-size: 0.7rem; }
+.work .frame .x { position: absolute; right: 0; top: 0; padding: 0 3px; line-height: 1.1; }
+.btn.wide { width: 100%; margin-top: 4px; }
+.cover {
+    background: none; border: 1px solid var(--line); color: inherit;
+    padding: 0 5px; cursor: pointer; opacity: 0.5; line-height: 1.3;
+}
+.cover:hover { opacity: 1; border-color: var(--green); }
+.cover.on { opacity: 1; color: var(--green); border-color: var(--green); background: rgba(192, 228, 140, 0.14); }
+.cover.on-frame { position: absolute; left: 0; top: 0; padding: 0 3px; font-size: 0.7rem; background: rgba(0, 0, 0, 0.6); }
+.cover.on-frame.on { background: rgba(192, 228, 140, 0.3); }
+.cover-note {
+    padding: 5px 14px; border-bottom: 1px solid var(--line);
+    opacity: 0.6; font-size: 0.85rem; letter-spacing: 1px;
+}
+.work .spacer-card {
+    height: 58px; display: flex; align-items: center; justify-content: center;
+    opacity: 0.4; letter-spacing: 2px; background: #000;
+}
+.work.drag-over { box-shadow: 0 0 0 2px var(--green); }
+.work .bar {
+    display: flex; align-items: center; gap: 6px;
+    padding: 3px 6px;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.85rem;
+}
+.work .bar .n { opacity: 0.45; cursor: grab; letter-spacing: 1px; }
+.work .bar .kind { opacity: 0.45; margin-left: auto; }
+.work .shot {
+    height: 118px; background: #000; display: flex; align-items: center; justify-content: center;
+    overflow: hidden; position: relative;
+}
+.work .shot img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.work .shot .none { opacity: 0.4; font-size: 0.85rem; }
+.work .dim {
+    position: absolute; right: 3px; bottom: 2px;
+    background: rgba(0, 0, 0, 0.65); padding: 0 5px; font-size: 0.75rem; opacity: 0.75;
+}
+.work .stale {
+    position: absolute; left: 3px; bottom: 2px;
+    background: rgba(120, 40, 40, 0.85); border: 1px solid #ff8f8f; color: #ffd0d0;
+    padding: 0 5px; font-size: 0.75rem;
+}
+.work .fields2 { padding: 5px 6px; display: flex; flex-direction: column; gap: 4px; }
+.work .pair-toggle {
+    display: flex; flex-direction: row; align-items: center; gap: 6px;
+    font-size: 0.85rem; opacity: 0.7; cursor: pointer;
+}
+.work .pair-toggle input { width: auto; }
+.work .pair-toggle:hover { opacity: 1; }
+.ask-row {
+    display: flex; gap: 8px; align-items: center;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(192, 228, 140, 0.05);
+}
+.ask-row input { flex: 1 1 auto; }
+
+.work .pair-warn {
+    font-size: 0.78rem; line-height: 1.25; color: #ffd479;
+    border-left: 2px solid #ffd479; padding-left: 5px;
+}
+
+/* --- arrange pane --- */
+#arrange {
+    position: fixed; inset: 0; z-index: 100;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+}
+#arrange[hidden] { display: none; }
+.arrange-bar {
+    display: flex; align-items: center; gap: 14px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--line);
+    flex: 0 0 auto;
+}
+.arrange-bar .spacer { flex: 1 1 auto; }
+#arrange-title { letter-spacing: 2px; }
+.arrange-hint { opacity: 0.5; font-size: 0.9rem; }
+.snap-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; opacity: 0.75; }
+.snap-toggle:hover { opacity: 1; }
+.snap-toggle input { width: auto; }
+.align-set { display: flex; gap: 6px; }
+.align-set[hidden] { display: none; }
+#arrange-frame { flex: 1 1 auto; width: 100%; border: 0; background: #050805; }
+
+#drop-hint { grid-column: 1 / -1; padding: 26px; text-align: center; opacity: 0.4; border: 1px dashed var(--line); }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>&gt; ARCHIVE_MANAGER</h1>
+    <span id="status">loading…</span>
+    <span class="spacer"></span>
+    <a class="btn" id="preview" href="/" target="_blank" rel="noopener">VIEW SITE</a>
+    <button class="btn primary" id="save" disabled>SAVE + BUILD</button>
+</header>
+
+<main>
+    <section id="projects">
+        <div class="head">
+            <span>PROJECTS</span>
+            <button class="btn" id="add-project">+ NEW</button>
+        </div>
+        <div id="project-list"></div>
+    </section>
+
+    <section id="editor">
+        <div id="empty">&gt; Select a project on the left.</div>
+    </section>
+</main>
+
+<section id="arrange" hidden>
+    <div class="arrange-bar">
+        <span id="arrange-title">ARRANGE</span>
+        <span class="arrange-hint">click to pick, shift-click for more, drag to move — the page you see is the page that ships</span>
+        <label class="snap-toggle" id="snap-wrap" hidden><input type="checkbox" id="snap-on" checked><span>SNAP</span></label>
+        <label class="snap-toggle" id="push-wrap" title="A work put down on others pushes them down to make room, and whatever they land on moves too" hidden><input type="checkbox" id="push-on" checked><span>PUSH</span></label>
+        <div class="align-set" id="align-wrap" hidden>
+            <button class="btn" data-align="center-h" title="Centre across the canvas. Several picked move together as one block." disabled>CENTRE H</button>
+            <button class="btn" data-align="center-v" title="Centre down the canvas. Several picked move together as one block." disabled>CENTRE V</button>
+            <button class="btn" data-align="left" title="Left edges together, or against the canvas when only one is picked" disabled>ALIGN L</button>
+            <button class="btn" data-align="right" title="Right edges together, or against the canvas when only one is picked" disabled>ALIGN R</button>
+        </div>
+        <span class="spacer"></span>
+        <button class="btn" id="arrange-close">CLOSE</button>
+    </div>
+    <iframe id="arrange-frame" title="Arrange works"></iframe>
+</section>
+
+<script>
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+const el = (tag, props = {}, kids = []) => {
+    const node = Object.assign(document.createElement(tag), props);
+    kids.forEach((k) => node.append(k));
+    return node;
+};
+
+/* Whatever YouTube handed you - the address bar, the share button, a Short -
+   becomes the embed form the page needs. The site reads the id back out of this
+   to find the video's thumbnail for the index rail, so the shape matters.
+   Anything unrecognised is passed through as typed, which is what lets a Vimeo
+   or other player URL still be pasted in directly. */
+function embedUrl(input) {
+    const url = String(input || "").trim();
+    if (!url) return "";
+
+    const youtube = /(?:youtube\.com\/(?:embed\/|shorts\/|live\/|watch\?(?:.*&)?v=)|youtu\.be\/)([\w-]{6,})/.exec(url);
+    /* The ordinary domain, not the no-cookie one. That one sets nothing until
+       a video plays, which is worth having - but it also refuses to serve some
+       videos the ordinary domain serves quite happily, and a showcase piece
+       that will not play is a worse thing than a cookie.
+       rel=0 keeps the end screen to this channel rather than offering somebody
+       else's work, iv_load_policy=3 drops the annotations, and playsinline
+       stops a phone taking the whole screen. Autoplay is not asked for here:
+       the page shows a still and loads the player only when it is pressed, and
+       it adds autoplay itself at that point. */
+    if (youtube) return `https://www.youtube.com/embed/${youtube[1]}?rel=0&playsinline=1&iv_load_policy=3&color=white`;
+
+    const vimeo = /vimeo\.com\/(?:video\/)?(\d{6,})/.exec(url);
+    if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`;
+
+    return /^https?:\/\//i.test(url) ? url : "";
+}
+
+/* Stored paths are relative to the repo root and this page is served from it,
+   so they only need a leading slash. An external image already resolves. */
+const assetUrl = (value) => {
+    const url = String(value || "").trim();
+    if (!url || /^([a-z]+:)?\/\//i.test(url) || url.startsWith("data:")) return url;
+    return "/" + url.replace(/^\//, "");
+};
+
+let data = { projects: [] };
+let selected = 0;
+let dirty = false;
+let canResize = true;
+/* Without ffmpeg a clip has no small copy, and the index plays the finished
+   file - which works, but asks a visitor for a great deal more than the frame
+   can show. Worth saying rather than leaving to be discovered. */
+let canShrinkClips = true;
+/* Works ticked to be put into a gallery. Indexes into the project's own list,
+   so it is dropped whenever that list is rebuilt under it. */
+let forGallery = new Set();
+
+const status = $("#status");
+function say(text, kind = "") {
+    status.textContent = text;
+    status.className = kind;
+}
+
+function markDirty() {
+    dirty = true;
+    $("#save").disabled = false;
+    say("unsaved changes");
+}
+
+/* ---------------------------------------------------------------- loading */
+
+async function load() {
+    const res = await fetch("/api/projects");
+    const payload = await res.json();
+    data = { projects: payload.projects || [] };
+    canResize = payload.resize !== false;
+    canShrinkClips = payload.clips !== false;
+    dirty = false;
+    $("#save").disabled = true;
+    forGallery = new Set();
+    renderProjects();
+    renderEditor();
+    const missing = [
+        canResize ? "" : "sharp missing, images stored as-is",
+        canShrinkClips ? "" : "ffmpeg missing, the index will play full clips"
+    ].filter(Boolean);
+
+    say(missing.length
+        ? data.projects.length + " projects loaded — " + missing.join("; ")
+        : data.projects.length + " projects loaded",
+        missing.length ? "bad" : "good");
+}
+
+async function save() {
+    say("saving…", "busy");
+    $("#save").disabled = true;
+    try {
+        const res = await fetch("/api/projects", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ projects: data.projects })
+        });
+        const out = await res.json();
+        if (!res.ok) throw new Error(out.error || "save failed");
+        dirty = false;
+        say("saved — " + out.projects + " pages, " + out.works + " works", "good");
+    } catch (error) {
+        say(error.message, "bad");
+        $("#save").disabled = false;
+    }
+}
+
+/* ------------------------------------------------------------ drag helper */
+
+/* One reorder behaviour for both lists: pick an item up, and dropping it on
+   another moves it into that position. */
+function makeSortable(container, itemSelector, onMove) {
+    let fromIndex = null;
+
+    container.addEventListener("dragstart", (e) => {
+        const item = e.target.closest(itemSelector);
+        if (!item) return;
+        fromIndex = Number(item.dataset.index);
+        item.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", String(fromIndex));
+    });
+
+    container.addEventListener("dragend", () => {
+        fromIndex = null;
+        container.querySelectorAll(".dragging, .drag-over")
+            .forEach((n) => n.classList.remove("dragging", "drag-over"));
+    });
+
+    container.addEventListener("dragover", (e) => {
+        if (fromIndex === null) return;
+        const item = e.target.closest(itemSelector);
+        if (!item) return;
+        e.preventDefault();
+        container.querySelectorAll(".drag-over").forEach((n) => n.classList.remove("drag-over"));
+        item.classList.add("drag-over");
+    });
+
+    container.addEventListener("drop", (e) => {
+        if (fromIndex === null) return;
+        const item = e.target.closest(itemSelector);
+        if (!item) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const to = Number(item.dataset.index);
+        if (to !== fromIndex) onMove(fromIndex, to);
+    });
+}
+
+const moveItem = (list, from, to) => list.splice(to, 0, list.splice(from, 1)[0]);
+
+/* --------------------------------------------------------- project column */
+
+function renderProjects() {
+    const list = $("#project-list");
+    list.textContent = "";
+
+    data.projects.forEach((project, i) => {
+        const item = el("div", { className: "p-item" + (i === selected ? " sel" : ""), draggable: true });
+        item.dataset.index = i;
+        item.append(
+            el("span", { className: "n", textContent: String(i + 1).padStart(2, "0") }),
+            el("span", { className: "t", textContent: project.title || project.slug }),
+            el("span", { className: "c", textContent: (project.works || []).length + "" })
+        );
+        item.addEventListener("click", () => { selected = i; renderProjects(); renderEditor(); });
+        list.append(item);
+    });
+}
+
+makeSortable($("#project-list"), ".p-item", (from, to) => {
+    const wasSelected = data.projects[selected];
+    moveItem(data.projects, from, to);
+    selected = data.projects.indexOf(wasSelected);
+    markDirty();
+    renderProjects();
+});
+
+$("#add-project").addEventListener("click", () => {
+    const used = new Set(data.projects.map((p) => p.slug));
+    let n = data.projects.length + 1;
+    let slug = "project_" + String(n).padStart(2, "0");
+    while (used.has(slug)) slug = "project_" + String(++n).padStart(2, "0");
+
+    data.projects.push({
+        slug,
+        title: slug,
+        archiveName: slug.toUpperCase(),
+        category: "UNSORTED",
+        shortDesc: "",
+        layout: "strip",
+        meta: [
+            { label: "CATEGORY", value: "UNSORTED" },
+            { label: "YEAR", value: String(new Date().getFullYear()) },
+            { label: "MEDIUM", value: "3D / CGI" },
+            { label: "TOOLS", value: "BLENDER" },
+            { label: "STATUS", value: "ARCHIVED" }
+        ],
+        works: []
+    });
+    selected = data.projects.length - 1;
+    markDirty();
+    renderProjects();
+    renderEditor();
+});
+
+/* ---------------------------------------------------------------- editor */
+
+function field(labelText, value, onInput, multiline = false) {
+    const input = multiline
+        ? el("textarea", { value: value || "", rows: 2 })
+        : el("input", { type: "text", value: value || "" });
+    input.addEventListener("input", () => { onInput(input.value); markDirty(); });
+    return el("label", {}, [el("i", { textContent: labelText }), input]);
+}
+
+/* Same shape as field(), for the handful of settings that are a choice rather
+   than free text. */
+function choiceField(labelText, value, options, onChange) {
+    const select = el("select");
+    options.forEach(([val, text]) => {
+        const option = el("option", { value: val, textContent: text });
+        if (val === value) option.selected = true;
+        select.appendChild(option);
+    });
+    select.addEventListener("change", () => { onChange(select.value); markDirty(); });
+    return el("label", {}, [el("i", { textContent: labelText }), select]);
+}
+
+function renderEditor() {
+    const editor = $("#editor");
+    editor.textContent = "";
+
+    const project = data.projects[selected];
+    if (!project) {
+        editor.append(el("div", { id: "empty", textContent: "> Select a project on the left." }));
+        return;
+    }
+
+    const fields = el("div", { className: "fields" });
+    fields.append(
+        field("TITLE (tape label)", project.title, (v) => { project.title = v; renderProjects(); }),
+        field("ARCHIVE NAME (page header)", project.archiveName, (v) => { project.archiveName = v; }),
+        field("CATEGORY (index filter)", project.category, (v) => { project.category = v; }),
+        field("SLUG (page filename)", project.slug, (v) => { project.slug = v; }),
+        field("SHORT DESCRIPTION", project.shortDesc, (v) => { project.shortDesc = v; }),
+        choiceField("LAYOUT", project.layout || "strip", [
+            ["strip", "STRIP — sideways, two rows"],
+            ["scroll", "COLUMN — down the page, with notes"],
+            ["free", "FREE — placed by hand, use ARRANGE"]
+        ], (v) => { project.layout = v; renderEditor(); })
+    );
+
+    // The specs table on the project page - free-form label/value pairs
+    const metaRows = el("div", { className: "meta-rows" });
+    const drawMeta = () => {
+        metaRows.textContent = "";
+        metaRows.append(el("i", { textContent: "SPECS", style: "width:100%;opacity:.45;font-size:.78rem;letter-spacing:1.5px" }));
+        (project.meta || []).forEach((row, i) => {
+            const label = el("input", { type: "text", value: row.label || "", placeholder: "LABEL" });
+            const value = el("input", { type: "text", className: "v", value: row.value || "", placeholder: "value" });
+            label.addEventListener("input", () => { row.label = label.value; markDirty(); });
+            value.addEventListener("input", () => { row.value = value.value; markDirty(); });
+            const remove = el("button", { className: "x", textContent: "×", title: "Remove spec" });
+            remove.addEventListener("click", () => { project.meta.splice(i, 1); markDirty(); drawMeta(); });
+            metaRows.append(el("div", { className: "meta-row" }, [label, value, remove]));
+        });
+        const add = el("button", { className: "btn", textContent: "+ SPEC" });
+        add.addEventListener("click", () => {
+            (project.meta = project.meta || []).push({ label: "", value: "" });
+            markDirty();
+            drawMeta();
+        });
+        metaRows.append(add);
+    };
+    drawMeta();
+    fields.append(metaRows);
+
+    const worksHead = el("div", { className: "works-head" });
+    /* Asked for in the page rather than through prompt(). A browser stops showing
+       dialogs entirely once anyone ticks "prevent this page from creating
+       additional dialogs", and extensions block them too - and then the button
+       looks broken, because nothing happens and nothing says why. */
+    const askInput = el("input", { type: "text" });
+    const askRow = el("div", { className: "ask-row", hidden: true });
+    let askSubmit = null;
+
+    const closeAsk = () => { askRow.hidden = true; askInput.value = ""; askSubmit = null; };
+    const runAsk = () => {
+        const value = askInput.value.trim();
+        if (!value || !askSubmit) return closeAsk();
+        const handler = askSubmit;
+        closeAsk();
+        handler(value);
+    };
+
+    const askOk = el("button", { className: "btn", textContent: "OK" });
+    const askCancel = el("button", { className: "btn", textContent: "CANCEL" });
+    askOk.addEventListener("click", runAsk);
+    askCancel.addEventListener("click", closeAsk);
+    askInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); runAsk(); }
+        if (e.key === "Escape") { e.preventDefault(); closeAsk(); }
+    });
+    askRow.append(askInput, askOk, askCancel);
+
+    function askInline(placeholder, onSubmit) {
+        askInput.placeholder = placeholder;
+        askSubmit = onSubmit;
+        askRow.hidden = false;
+        askInput.focus();
+    }
+
+    const addVideo = el("button", { className: "btn", textContent: "+ VIDEO" });
+    addVideo.addEventListener("click", () => {
+        askInline("Paste a YouTube link, then press Enter", (url) => {
+            const embed = embedUrl(url);
+            if (!embed) return say("that does not look like a video link", "bad");
+
+            project.works.push({ type: "video", src: embed, title: "MOTION_CLIP", body: "" });
+            markDirty();
+            renderEditor();
+            say("video added — press SAVE + BUILD to publish", "good");
+        });
+    });
+    const del = el("button", { className: "btn danger", textContent: "DELETE PROJECT" });
+    del.addEventListener("click", () => {
+        if (data.projects.length === 1) return say("the site needs at least one project", "bad");
+        if (!confirm("Delete " + (project.title || project.slug) + " and its " + project.works.length + " works from the site?\n\nImage files stay on disk.")) return;
+        data.projects.splice(selected, 1);
+        selected = Math.max(0, selected - 1);
+        markDirty();
+        renderProjects();
+        renderEditor();
+    });
+
+    const importFolder = el("button", { className: "btn", textContent: "+ FOLDER" });
+    importFolder.addEventListener("click", () => {
+        askInline("Full path to a folder of images — read straight off the disk", runImport);
+    });
+
+    async function runImport(dir) {
+        say("importing from " + dir + " …", "busy");
+        try {
+            const res = await fetch("/api/import", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ slug: project.slug, dir })
+            });
+            const out = await res.json();
+            if (!res.ok) throw new Error(out.error || "import failed");
+
+            let bytes = 0;
+            out.works.forEach((work) => {
+                bytes += work.bytes || 0;
+                delete work.bytes;
+                project.works.push(work);
+            });
+
+            markDirty();
+            renderEditor();
+            say(out.works.length + " imported, " + readable(bytes) + " added — press SAVE + BUILD to publish", "good");
+        } catch (error) {
+            say(error.message, "bad");
+        }
+    }
+
+    const arrange = el("button", { className: "btn", textContent: "ARRANGE" });
+    arrange.addEventListener("click", openArrange);
+
+    /* Several pictures made into one work. It keeps the place of the first one
+       ticked, so the running order barely moves, and the rest come out of the
+       list into it. */
+    /* Gathering ticked works into one. A set and a comparison are the same act
+       - several works becoming a single one that holds them - and differ only in
+       what the page then does with what is inside. */
+    function gatherTicked(kind, label) {
+        const picked = [...forGallery].sort((a, b) => a - b);
+        if (picked.length < 2) return say("tick two or more first", "bad");
+        if (kind === "compare" && picked.length !== 2) {
+            return say("a comparison is two pictures — tick exactly two", "bad");
+        }
+
+        const shots = picked.map((i) => project.works[i]);
+        if (kind === "compare" && shots.some((w) => w.type !== "image")) {
+            return say("a comparison is two pictures — a clip has nothing to slide across", "bad");
+        }
+
+        const at = picked[0];
+        const made = {
+            type: kind,
+            title: shots[0].title || label.toUpperCase(),
+            body: "",
+            /* The frames keep everything the manager knows about each work, so
+               ungrouping later hands them back whole. The kind is kept with them
+               now that a set can hold more than pictures - only where it sits on
+               the canvas is dropped, since the one holding them holds that. */
+            frames: shots.map((work) => {
+                const frame = { ...work };
+                ["x", "y", "wf", "hf", "half", "body"].forEach((key) => delete frame[key]);
+                return frame;
+            })
+        };
+
+        /* Wherever the first one sat on a hand-placed canvas, the new work takes
+           over - it is standing in the same spot. */
+        ["x", "y", "wf"].forEach((key) => {
+            if (shots[0][key] != null) made[key] = shots[0][key];
+        });
+
+        project.works = project.works.filter((w) => !shots.includes(w));
+        project.works.splice(at, 0, made);
+        forGallery = new Set();
+        markDirty();
+        renderEditor();
+        say(shots.length + " works made into a " + label + " — press SAVE + BUILD to publish", "good");
+    }
+
+    const group = el("button", { className: "btn", id: "group-gallery", textContent: "GALLERY", disabled: true });
+    group.addEventListener("click", () => gatherTicked("gallery", "gallery"));
+
+    const compare = el("button", {
+        className: "btn", id: "group-compare", textContent: "COMPARE", disabled: true,
+        title: "Two pictures with a line dragged across them, one revealing the other"
+    });
+    compare.addEventListener("click", () => gatherTicked("compare", "comparison"));
+
+    /* Furniture rather than works: a note to write on and a gap to leave. Both
+       are placed and sized by hand in ARRANGE like anything else, and neither
+       counts as an asset on the page. */
+    const addNote = el("button", { className: "btn", textContent: "+ NOTE" });
+    addNote.addEventListener("click", () => {
+        project.works.push({ type: "note", title: "NOTE", body: "" });
+        markDirty();
+        renderEditor();
+        say("note added — write in it below, then place it in ARRANGE", "good");
+    });
+
+    const addSpacer = el("button", { className: "btn", textContent: "+ SPACE" });
+    addSpacer.addEventListener("click", () => {
+        project.works.push({ type: "spacer" });
+        markDirty();
+        renderEditor();
+        say("spacer added — size it in ARRANGE", "good");
+    });
+
+    worksHead.append(
+        el("span", { textContent: "WORKS — drag to reorder; drop images or mp4/webm clips below to add" }),
+        addNote,
+        addSpacer,
+        group,
+        compare,
+        arrange,
+        importFolder,
+        addVideo,
+        del
+    );
+
+    const coverNote = el("div", { className: "cover-note" });
+    const chosen = (project.cover || []).length;
+    coverNote.textContent = chosen
+        ? "INDEX PREVIEW — " + chosen + " chosen by hand, shown in that order"
+        : "INDEX PREVIEW — nothing chosen, so the index shows the first clip and pictures. Press ☆ on any work or frame to choose.";
+
+    const works = el("div", { id: "works" });
+    editor.append(fields, worksHead, coverNote, askRow, works);
+    renderWorks();
+    wireDrop(works);
+}
+
+/* The card knows the size of the file you handed over. This checks it against
+   what is actually stored, so a copy left behind by an older upload - back when
+   the full size was capped - shows up here instead of just looking soft when you
+   zoom into it on the site. */
+function flagIfShrunk(work, shot) {
+    if (!work.full || !work.w) return;
+
+    const probe = new Image();
+    probe.onload = () => {
+        if (probe.naturalWidth >= work.w - 2) return;
+        shot.append(el("span", {
+            className: "stale",
+            textContent: Math.round((probe.naturalWidth / work.w) * 100) + "% — re-upload",
+            title: `Stored at ${probe.naturalWidth}x${probe.naturalHeight}, but the file you gave was ${work.w}x${work.h}`
+        }));
+    };
+    probe.src = assetUrl(work.full);
+}
+
+/* What the index shows for a project on hover. Held as the addresses of the
+   pictures themselves rather than their places in the list, so reordering the
+   works - or pulling one out of a set - does not quietly repoint a cover at
+   something else. Order is the order they were chosen in. */
+function coverList(project) {
+    if (!Array.isArray(project.cover)) project.cover = [];
+    return project.cover;
+}
+
+const inCover = (project, src) => coverList(project).includes(src);
+
+function toggleCover(project, src) {
+    const cover = coverList(project);
+    const at = cover.indexOf(src);
+
+    if (at >= 0) cover.splice(at, 1);
+    else if (cover.length >= 6) return say("six is as many as the index will show", "bad");
+    else cover.push(src);
+
+    if (!cover.length) delete project.cover;
+    markDirty();
+    renderWorks();
+}
+
+/* The mark on a work, or on one frame of a set, that puts it in the index.
+   Nothing chosen anywhere means the index picks for itself, which is what it
+   did before there was any choosing - so an untouched project is unchanged. */
+function coverMark(project, src, extra = "") {
+    const on = inCover(project, src);
+    const order = on ? coverList(project).indexOf(src) + 1 : 0;
+
+    const mark = el("button", {
+        className: "cover" + (on ? " on" : "") + (extra ? " " + extra : ""),
+        textContent: on ? String(order) : "☆",
+        title: on
+            ? "Shown in the index, " + order + " of " + coverList(project).length + " — press to remove"
+            : "Show this in the index when the tape is hovered"
+    });
+    mark.addEventListener("click", (e) => { e.stopPropagation(); toggleCover(project, src); });
+    return mark;
+}
+
+function renderWorks() {
+    const container = $("#works");
+    if (!container) return;
+    const project = data.projects[selected];
+    container.textContent = "";
+    forGallery = new Set();
+    // Redrawing the list drops the ticks, so the button goes back with them
+    ["#group-gallery", "#group-compare"].forEach((sel) => {
+        const button = $(sel);
+        if (button) button.disabled = true;
+    });
+
+    if (!project.works.length) {
+        container.append(el("div", { id: "drop-hint", textContent: "> No works yet. Drop images or clips here." }));
+        return;
+    }
+
+    project.works.forEach((work, i) => {
+        const card = el("div", { className: "work", draggable: true });
+        card.dataset.index = i;
+
+        const remove = el("button", { className: "x", textContent: "×", title: "Remove this work" });
+        remove.addEventListener("click", async () => {
+            project.works.splice(i, 1);
+            markDirty();
+            renderWorks();
+            renderProjects();
+            if (work.type === "image" || work.type === "clip"
+                || work.type === "gallery" || work.type === "compare") {
+                // Save first so the server can see the work is really gone
+                await save();
+                // A set holds its pictures a level down, so each is asked for
+                const going = work.frames || [work];
+                for (const pic of going) {
+                    await fetch("/api/delete-image", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(pic)
+                    });
+                }
+            }
+        });
+
+        const kind = work.type === "image" ? "IMG"
+            : work.type === "clip" ? "CLIP"
+            : work.type === "gallery" ? "SET x" + (work.frames || []).length
+            : work.type === "compare" ? "COMPARE"
+            : work.type === "note" ? "NOTE"
+            : work.type === "spacer" ? "SPACE"
+            : "MP4";
+
+        const bar = el("div", { className: "bar" }, [
+            el("span", { className: "n", textContent: "⠿ " + String(i + 1).padStart(2, "0") })
+        ]);
+
+        /* Anything you would step through can be gathered into a set. Notes and
+           spacers cannot: they are furniture, and a set is something to look at. */
+        if (work.type === "image" || work.type === "clip" || work.type === "video") {
+            const tick = el("input", { type: "checkbox", className: "pick", checked: forGallery.has(i) });
+            tick.title = "Tick two or more, then press GALLERY";
+            tick.addEventListener("change", () => {
+                if (tick.checked) forGallery.add(i);
+                else forGallery.delete(i);
+
+                // A set takes any number from two up; a comparison takes two
+                const gallery = $("#group-gallery");
+                const pair = $("#group-compare");
+                if (gallery) gallery.disabled = forGallery.size < 2;
+                if (pair) pair.disabled = forGallery.size !== 2;
+            });
+            bar.append(tick);
+        }
+
+        bar.append(el("span", { className: "kind", textContent: kind }));
+
+        // A set holds several, so its marks go on the frames rather than here
+        if (work.src && !work.frames) bar.append(coverMark(project, work.src));
+
+        bar.append(remove);
+        card.append(bar);
+
+        /* Nothing to show and nothing to say - a spacer is a gap, and the only
+           thing to do with it is put it somewhere and give it a size. */
+        if (work.type === "spacer") {
+            card.append(el("div", { className: "spacer-card", textContent: "· · ·  gap  · · ·" }));
+            container.append(card);
+            return;
+        }
+
+        if (work.type === "note") {
+            const nf = el("div", { className: "fields2" });
+            nf.append(
+                field("HEADING", work.title, (v) => { work.title = v; }),
+                field("TEXT", work.body, (v) => { work.body = v; }, true),
+                /* The words are already a share of the frame, so dragging a note
+                   bigger in ARRANGE scales the whole thing. This is on top of
+                   that, for when a wide note wants small words or a small one
+                   wants a heading. */
+                choiceField("TEXT SIZE", String(work.ts || 1), [
+                    ["0.6", "SMALL"],
+                    ["1", "NORMAL"],
+                    ["1.6", "LARGE"],
+                    ["2.4", "HUGE"]
+                ], (v) => { work.ts = Number(v); })
+            );
+            card.append(nf);
+            container.append(card);
+            return;
+        }
+
+        if (work.type === "gallery" || work.type === "compare") {
+            const strip = el("div", { className: "frames" });
+            (work.frames || []).forEach((frame, n) => {
+                const cell = el("div", { className: "frame" });
+
+                /* An embed has no file of its own to show, so it is named
+                   rather than pictured; everything else has a still. */
+                const still = frame.thumb || frame.poster
+                    || (frame.type === "video" ? "" : frame.src);
+                if (still) cell.append(el("img", { src: assetUrl(still), alt: "", loading: "lazy" }));
+                else cell.append(el("span", { className: "fk", textContent: "MP4" }));
+                if (frame.type === "clip" || frame.type === "video") {
+                    cell.append(el("span", { className: "fv", textContent: "▶" }));
+                }
+                cell.append(el("span", { className: "fn", textContent: String(n + 1).padStart(2, "0") }));
+                if (frame.src) cell.append(coverMark(project, frame.src, "on-frame"));
+
+                /* One picture out of the set. It goes back to being a work of
+                   its own rather than off the page, which is what you want when
+                   a set was gathered a picture too wide. */
+                const out = el("button", { className: "x", textContent: "×", title: "Take this picture out of the set" });
+                out.addEventListener("click", () => {
+                    if (work.type === "compare") {
+                        return say("a comparison is two pictures — ungroup it to take them apart", "bad");
+                    }
+                    if (work.frames.length <= 2) return say("a set of one is just a picture — ungroup it instead", "bad");
+                    work.frames.splice(n, 1);
+                    project.works.splice(i + 1, 0, { type: "image", body: "", ...frame });
+                    markDirty();
+                    renderEditor();
+                });
+                cell.append(out);
+                strip.append(cell);
+            });
+            card.append(strip);
+
+            const split = el("button", { className: "btn wide", textContent: "UNGROUP" });
+            split.addEventListener("click", () => {
+                const loose = work.frames.map((frame) => ({ type: "image", body: "", ...frame }));
+                // The set's place on a canvas passes to the first picture out of it
+                ["x", "y", "wf"].forEach((key) => {
+                    if (work[key] != null) loose[0][key] = work[key];
+                });
+                project.works.splice(i, 1, ...loose);
+                forGallery = new Set();
+                markDirty();
+                renderEditor();
+                say((work.type === "compare" ? "comparison" : "gallery")
+                    + " taken apart — press SAVE + BUILD to publish", "good");
+            });
+
+            const gf = el("div", { className: "fields2" });
+            gf.append(
+                field("TITLE", work.title, (v) => { work.title = v; }),
+                field("NOTES", work.body, (v) => { work.body = v; }, true),
+                split
+            );
+            card.append(gf);
+            container.append(card);
+            return;
+        }
+
+        const shot = el("div", { className: "shot" });
+        if (work.type === "video") {
+            shot.append(el("span", { className: "none", textContent: "▶ " + (work.src || "").slice(-18) }));
+        } else if (work.thumb || work.poster || work.src) {
+            shot.append(el("img", { src: assetUrl(work.thumb || work.poster || work.src), alt: "", loading: "lazy" }));
+            if (work.w && work.h) shot.append(el("span", { className: "dim", textContent: work.w + "×" + work.h }));
+            flagIfShrunk(work, shot);
+        } else {
+            shot.append(el("span", { className: "none", textContent: "no image" }));
+        }
+        card.append(shot);
+
+        const f = el("div", { className: "fields2" });
+        f.append(
+            field("TITLE", work.title, (v) => { work.title = v; }),
+            field("NOTES", work.body, (v) => { work.body = v; }, true)
+        );
+        /* Only the column layout can act on this - the strip packs by width
+           already - so it is offered where that layout is in use. */
+        if (work.type === "image" && (project.layout || "strip") === "scroll") {
+            const box = el("input", { type: "checkbox", checked: Boolean(work.half) });
+            box.addEventListener("change", () => { work.half = box.checked; markDirty(); renderWorks(); });
+            f.append(el("label", { className: "pair-toggle", title: "Share a line with the work directly before or after it, if that one is marked too" },
+                [box, el("span", { textContent: "SIDE BY SIDE" })]));
+
+            /* Two works can only sit together if they are next to each other in
+               the running order, so a mark on its own does nothing but make the
+               work narrower. Better to say so than to leave it looking broken. */
+            const works = project.works;
+            const lonely = work.half
+                && !(works[i - 1] && works[i - 1].half)
+                && !(works[i + 1] && works[i + 1].half);
+            if (lonely) {
+                f.append(el("span", { className: "pair-warn",
+                    textContent: "nothing to pair with — drag it beside another marked work" }));
+            }
+        }
+
+        if (work.type === "video") {
+            // Converted when you leave the field, so pasting a watch link here
+            // does not quietly leave the page with a URL it cannot embed
+            const urlField = field("VIDEO URL", work.src, (v) => { work.src = v; });
+            const input = urlField.querySelector("input");
+            input.addEventListener("blur", () => {
+                const embed = embedUrl(input.value);
+                if (embed && embed !== input.value) {
+                    input.value = embed;
+                    work.src = embed;
+                    markDirty();
+                }
+            });
+            f.append(urlField);
+        }
+        card.append(f);
+
+        container.append(card);
+    });
+}
+
+makeSortable(document.body, ".work", (from, to) => {
+    moveItem(data.projects[selected].works, from, to);
+    markDirty();
+    renderWorks();
+});
+
+/* ---------------------------------------------------------------- upload */
+
+const readAsDataURL = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+});
+
+/* The browser already knows the real pixel size, so it is read here rather than
+   asking the server for it - it works even when sharp is not installed. */
+const measure = (dataUrl) => new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => resolve({ w: 0, h: 0 });
+    img.src = dataUrl;
+});
+
+/* Grabs a frame out of a clip to use as its poster and its index thumbnail.
+   Doing it here means the server needs no ffmpeg: the browser can already
+   decode the video, so it just seeks a little way in and paints one frame. */
+const grabPoster = (file) => new Promise((resolve) => {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+
+    const give = (result) => {
+        URL.revokeObjectURL(video.src);
+        resolve(result);
+    };
+
+    video.onloadedmetadata = () => {
+        // A whole second in, unless the clip is shorter than that
+        video.currentTime = Math.min(1, (video.duration || 0) / 2) || 0;
+    };
+    video.onseeked = () => {
+        try {
+            const canvas = document.createElement("canvas");
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext("2d").drawImage(video, 0, 0);
+            const url = canvas.toDataURL("image/jpeg", 0.9);
+            give({ w: video.videoWidth, h: video.videoHeight, poster: url.slice(url.indexOf(",") + 1) });
+        } catch {
+            give({ w: video.videoWidth, h: video.videoHeight, poster: "" });
+        }
+    };
+    video.onerror = () => give({ w: 0, h: 0, poster: "" });
+
+    video.src = URL.createObjectURL(file);
+});
+
+function wireDrop(zone) {
+    const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+
+    zone.addEventListener("dragover", (e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        stop(e);
+        zone.classList.add("drop");
+    });
+    zone.addEventListener("dragleave", (e) => {
+        if (e.target === zone) zone.classList.remove("drop");
+    });
+    zone.addEventListener("drop", async (e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        stop(e);
+        zone.classList.remove("drop");
+        await upload(Array.from(e.dataTransfer.files)
+            .filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/")));
+    });
+}
+
+const readable = (bytes) => (bytes > 1024 * 1024
+    ? (bytes / 1024 / 1024).toFixed(1) + "MB"
+    : Math.round(bytes / 1024) + "KB");
+
+async function upload(files) {
+    if (!files.length) return;
+    const project = data.projects[selected];
+    let added = 0;
+    let bytes = 0;
+
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const isClip = file.type.startsWith("video/");
+        say(`uploading ${i + 1}/${files.length} — ${file.name}`, "busy");
+
+        try {
+            // A clip contributes its own poster frame; a still measures itself
+            const dataUrl = await readAsDataURL(file);
+            const shape = isClip ? await grabPoster(file) : await measure(dataUrl);
+
+            const res = await fetch("/api/upload", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    slug: project.slug,
+                    name: file.name,
+                    kind: isClip ? "clip" : "image",
+                    w: shape.w,
+                    h: shape.h,
+                    poster: shape.poster,
+                    data: dataUrl.slice(dataUrl.indexOf(",") + 1)
+                })
+            });
+            const out = await res.json();
+            if (!res.ok) throw new Error(out.error || "upload failed");
+
+            project.works.push({
+                type: isClip ? "clip" : "image",
+                src: out.src,
+                thumb: out.thumb,
+                ...(isClip ? { poster: out.poster } : { full: out.full, viewW: out.viewW }),
+                w: out.w,
+                h: out.h,
+                title: file.name.replace(/\.[^.]+$/, "").toUpperCase().replace(/[^A-Z0-9]+/g, "_"),
+                body: ""
+            });
+
+            added++;
+            bytes += out.bytes || 0;
+            renderWorks();
+            renderProjects();
+        } catch (error) {
+            say(file.name + ": " + error.message, "bad");
+            if (added) markDirty();
+            return;
+        }
+    }
+
+    markDirty();
+    say(`${added} uploaded, ${readable(bytes)} added — press SAVE + BUILD to publish`, "good");
+}
+
+/* ----------------------------------------------------------------- wiring */
+
+/* ---------------------------------------------------------------- arrange */
+
+/* The frame shows the real page. It reports what was moved, this holds the data,
+   and SAVE writes it - so nothing is saved from inside the page itself. */
+function openArrange() {
+    const project = data.projects[selected];
+    if (!project) return;
+    if (!project.works.length) return say("nothing to arrange in this project yet", "bad");
+
+    if (dirty) return say("save first — arrange opens the built page, not the unsaved edits", "bad");
+
+    $("#arrange-title").textContent = "ARRANGE — " + (project.title || project.slug);
+    $("#arrange-frame").src = "/filepage/" + project.slug + ".html?edit=1";
+    $("#arrange").hidden = false;
+}
+
+function closeArrange() {
+    $("#arrange").hidden = true;
+    $("#arrange-frame").src = "about:blank";
+    renderEditor();
+    renderProjects();
+}
+
+window.addEventListener("message", (e) => {
+    const msg = e.data;
+    if (!msg || msg.source !== "archive-arrange") return;
+
+    const project = data.projects[selected];
+    if (!project || !Array.isArray(msg.order)) return;
+
+    if (msg.type === "ready") {
+        // Both only mean anything where works are placed by hand
+        $("#snap-wrap").hidden = !msg.free;
+        $("#push-wrap").hidden = !msg.free;
+        if (msg.push != null) $("#push-on").checked = Boolean(msg.push);
+        $("#align-wrap").hidden = !msg.free;
+        setAlignEnabled(0);
+        return;
+    }
+
+    // Nothing picked is nothing to align, so the buttons say so
+    if (msg.type === "picked") {
+        setAlignEnabled(msg.count);
+        return;
+    }
+
+    if (msg.type === "place" && Array.isArray(msg.placements)) {
+        msg.placements.forEach((spot) => {
+            const work = project.works[spot.origin];
+            if (!work) return;
+            work.x = spot.x;
+            work.y = spot.y;
+            work.wf = spot.w;
+            // Only a frame reports one, and only a frame keeps one
+            if (spot.h != null) work.hf = spot.h;
+            else delete work.hf;
+        });
+        markDirty();
+        say("placed — press SAVE + BUILD to keep it", "good");
+        return;
+    }
+
+    if (msg.type === "size" && Array.isArray(msg.sizes)) {
+        msg.sizes.forEach((item) => {
+            const work = project.works[item.origin];
+            if (!work) return;
+            if (item.w) work.wf = item.w;
+            else delete work.wf;
+        });
+        markDirty();
+        say("resized — press SAVE + BUILD to keep it", "good");
+        return;
+    }
+
+    if (msg.type === "order") {
+        /* The page reports where each work started, so the same shuffle can be
+           applied here without this end having to work out what moved. */
+        const before = project.works.slice();
+        project.works = msg.order.map((i) => before[i]).filter(Boolean);
+        if (project.works.length !== before.length) {
+            project.works = before;
+            return say("could not follow that move — reopen arrange", "bad");
+        }
+        markDirty();
+        say("moved — press SAVE + BUILD to keep it", "good");
+    }
+});
+
+function setAlignEnabled(count) {
+    $$("#align-wrap .btn").forEach((btn) => { btn.disabled = !count; });
+}
+
+/* The page owns the placements, so a press is passed to it rather than worked
+   out here; what comes back is an ordinary "place" report like a drag's. */
+$$("#align-wrap .btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+        const frame = $("#arrange-frame");
+        if (!frame.contentWindow) return;
+        frame.contentWindow.postMessage(
+            { source: "archive-manager", type: "align", how: btn.dataset.align }, "*");
+    });
+});
+
+$("#push-on").addEventListener("change", (e) => {
+    const frame = $("#arrange-frame");
+    if (frame.contentWindow) {
+        frame.contentWindow.postMessage(
+            { source: "archive-manager", type: "push", on: e.target.checked }, "*");
+    }
+});
+
+$("#snap-on").addEventListener("change", (e) => {
+    const frame = $("#arrange-frame");
+    if (frame.contentWindow) {
+        frame.contentWindow.postMessage({ source: "archive-manager", type: "snap", on: e.target.checked }, "*");
+    }
+});
+
+$("#arrange-close").addEventListener("click", closeArrange);
+$("#save").addEventListener("click", save);
+window.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); if (dirty) save(); }
+});
+window.addEventListener("beforeunload", (e) => {
+    if (dirty) { e.preventDefault(); e.returnValue = ""; }
+});
+// Dropping a file anywhere else would make the browser navigate away from the page
+["dragover", "drop"].forEach((type) => {
+    window.addEventListener(type, (e) => {
+        if (e.dataTransfer && e.dataTransfer.types.includes("Files")) e.preventDefault();
+    });
+});
+
+load().catch((error) => say("could not load: " + error.message, "bad"));
+</script>
+</body>
+</html>
