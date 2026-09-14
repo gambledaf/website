@@ -951,11 +951,44 @@ body {
 }
 
 /* --- INDEX / THUMBNAIL RAIL --- */
+/* As tall as the pictures it holds, and no taller. It used to take whatever was
+   going, which left the thumbnails sitting at the top of a long empty frame. */
 .index-block {
-    flex: 1 1 auto;
-    min-height: 140px;
+    flex: 0 1 auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
+}
+
+/* With nothing written about the project there is no block to hold, so the
+   index takes back the room it gave up and the panel fills out as it always
+   did. */
+.console-panel.no-about .index-block {
+    flex: 1 1 auto;
+    min-height: 140px;
+}
+
+/* What the index gave up: a few words about the project, with the room to grow
+   into whatever is left between the pictures and the specs below. */
+.about-block {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.about-block .project-about {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7em;
+    font-family: 'VT323', monospace;
+    font-size: 1.02rem;
+    line-height: 1.42;
+    color: var(--term-light);
+    opacity: 0.82;
+}
+
+.about-block .project-about p {
+    margin: 0;
 }
 
 .index-head {

@@ -29,6 +29,14 @@
     src: local('Recharge Bold'), local('RechargeBold');
 }
 
+/* The hand that writes the name down the side of a tape. Declared here rather
+   than fetched from anywhere: it is a file in the project. */
+@font-face {
+    font-family: 'Modavina';
+    src: url('font/modavina-casual-drawing.otf') format('opentype');
+    font-display: swap;
+}
+
 @font-face {
     font-family: 'Handodle';
     src:
