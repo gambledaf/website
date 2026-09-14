@@ -339,6 +339,22 @@ ${frames}
             </div>`;
 }
 
+/* A few words about the project itself, as against the notes on any one work.
+   Written into the page beside the specs so the console can lift it out, and so
+   a reader with no JavaScript still gets it. */
+function aboutBlock(project) {
+    const text = String(project.about || "").trim();
+    if (!text) return "";
+
+    const paragraphs = text.split(/\n{2,}/)
+        .map((para) => "                <p>" + esc(para.trim()).replace(/\n/g, "<br>") + "</p>")
+        .join("\n");
+
+    return `            <div class="project-about">
+${paragraphs}
+            </div>`;
+}
+
 function metaBlock(project) {
     const fields = (project.meta || []).map((field) => `                <div class="meta-field">
                     <span class="meta-label">&gt; ${esc(field.label)}</span>
@@ -415,6 +431,7 @@ function buildPage(project, index, projects) {
         <div class="project-grid" data-layout="${["scroll", "free"].includes(project.layout) ? project.layout : "strip"}" data-canvas="${Number(project.canvas) || 1.4}">
 
 ${metaBlock(project)}
+${aboutBlock(project)}
 
 ${works}
 

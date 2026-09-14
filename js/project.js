@@ -279,6 +279,9 @@ function buildProjectConsole() {
                         </div>
                         <div class="thumb-rail"></div>
                     </section>
+                    <section class="console-block about-block animate-in">
+                        <span class="block-label">ABOUT</span>
+                    </section>
                     <section class="console-block meta-block animate-in">
                         <span class="block-label">SPECS</span>
                     </section>
@@ -323,6 +326,21 @@ function buildProjectConsole() {
     if (pageHeader) stage.insertBefore(pageHeader, stage.firstElementChild);
 
     // Reuse the existing meta table instead of duplicating its content
+    /* The project's own few words, taken out of the page the same way the specs
+       are. Nothing written means no block at all, rather than an empty frame. */
+    const aboutBlock = consoleEl.querySelector(".about-block");
+    const aboutSource = grid.querySelector(".project-about");
+    if (aboutSource) {
+        aboutBlock.appendChild(aboutSource);
+    } else {
+        /* Nothing written: the block goes, and the panel is marked so the index
+           can take the room back. Left alone it would hold its new shorter
+           height and leave a gap where the words would have been, which is a
+           worse thing than never having made room for them. */
+        aboutBlock.remove();
+        consoleEl.querySelector(".console-panel").classList.add("no-about");
+    }
+
     const metaBlock = consoleEl.querySelector(".meta-block");
     const metaSource = grid.querySelector(".project-meta");
     if (metaSource) {

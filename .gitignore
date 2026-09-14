@@ -1,3 +1,8 @@
 node_modules/
 .DS_Store
 dist/
+# Substance Painter working files - hundreds of MB each, and
+# not something the site needs. The exported textures are enough.
+*.spp
+*.spp.painter_lock
+*_autosave_*.spp

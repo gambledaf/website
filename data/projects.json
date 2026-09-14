@@ -107,18 +107,19 @@
         "images/projects/project_01/turn-clip.mp4",
         "images/projects/project_01/photo-05-view.webp"
       ],
-      "film": "images/projects/project_01/photo-04-view.webp"
+      "film": "images/projects/project_01/photo-04-view.webp",
+      "about": "This is a personal project I worked on in my free time, The AMP Suit from Avatar. I gathered references from a variety of sources, including behind-the-scenes videos, making-of material, and old blueprints, and used them to recreate the model as accurately as possible.\nIt was a really fun project to work on, especially because the AMP Suit was one of my favorite mech designs growing up. It was great to finally bring a mech I loved as a kid into 3D."
     },
     {
       "slug": "project_05",
       "title": "HondaCivic Type-R",
-      "archiveName": "PROJECT_05",
+      "archiveName": "HondaCivic Type-R",
       "category": "Modeling",
       "shortDesc": "test_05",
       "meta": [
         {
           "label": "CATEGORY",
-          "value": "Category_04"
+          "value": "Modeling"
         },
         {
           "label": "YEAR",
@@ -280,13 +281,13 @@
     {
       "slug": "project_08",
       "title": "Aviator",
-      "archiveName": "PROJECT_08",
+      "archiveName": "Aviator",
       "category": "Modeling",
       "shortDesc": "test_05",
       "meta": [
         {
           "label": "CATEGORY",
-          "value": "Category_05"
+          "value": "Modeling"
         },
         {
           "label": "YEAR",
@@ -415,13 +416,13 @@
     {
       "slug": "project_07",
       "title": "Mitamotorsports",
-      "archiveName": "PROJECT_07",
+      "archiveName": "Mitamotorsports",
       "category": "Rendering",
       "shortDesc": "test_05",
       "meta": [
         {
           "label": "CATEGORY",
-          "value": "Category_05"
+          "value": "Rendering"
         },
         {
           "label": "YEAR",
@@ -559,13 +560,13 @@
     {
       "slug": "project_03",
       "title": "JiggyPiggies",
-      "archiveName": "PROJECT_03",
+      "archiveName": "JiggyPiggies",
       "category": "Animation",
       "shortDesc": "test_03",
       "meta": [
         {
           "label": "CATEGORY",
-          "value": "Category_03"
+          "value": "Animation"
         },
         {
           "label": "YEAR",
@@ -622,13 +623,13 @@
     {
       "slug": "project_04",
       "title": "Planets",
-      "archiveName": "PROJECT_04",
+      "archiveName": "Planets",
       "category": "Animation",
       "shortDesc": "test_04",
       "meta": [
         {
           "label": "CATEGORY",
-          "value": "Category_04"
+          "value": "Animation"
         },
         {
           "label": "YEAR",
@@ -757,13 +758,13 @@
     {
       "slug": "project_06",
       "title": "MCL32",
-      "archiveName": "PROJECT_06",
+      "archiveName": "MCL32",
       "category": "Modeling",
       "shortDesc": "test_04",
       "meta": [
         {
           "label": "CATEGORY",
-          "value": "Category_04"
+          "value": "Modeling"
         },
         {
           "label": "YEAR",
@@ -894,13 +895,13 @@
     {
       "slug": "project_02",
       "title": "Sovereign Life",
-      "archiveName": "DESIGN_02",
+      "archiveName": "Sovereign Life",
       "category": "Animation",
       "shortDesc": "test_02",
       "meta": [
         {
           "label": "CATEGORY",
-          "value": "DESIGN"
+          "value": "Animation"
         },
         {
           "label": "YEAR",

@@ -532,7 +532,14 @@ function renderEditor() {
         field("ARCHIVE NAME (page header)", project.archiveName, (v) => { project.archiveName = v; }),
         field("CATEGORY (index filter)", project.category, (v) => { project.category = v; }),
         field("SLUG (page filename)", project.slug, (v) => { project.slug = v; }),
-        field("SHORT DESCRIPTION", project.shortDesc, (v) => { project.shortDesc = v; }),
+        field("SHORT DESCRIPTION (index hover)", project.shortDesc, (v) => { project.shortDesc = v; }),
+        /* A few words about the project, shown in the panel on its own page
+           under the thumbnails. A blank line starts a new paragraph. */
+        field("ABOUT (project page panel)", project.about, (v) => {
+            const text = String(v || "").trim();
+            if (text) project.about = text;
+            else delete project.about;
+        }, true),
         choiceField("LAYOUT", project.layout || "strip", [
             ["strip", "STRIP — sideways, two rows"],
             ["scroll", "COLUMN — down the page, with notes"],

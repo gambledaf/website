@@ -919,6 +919,19 @@ function restoreArchiveInteractionState() {
     state.activeTape = null;
     state.previousTape = null;
     document.body.style.cursor = 'default';
+
+    /* Back to the middle of the shelf, where the page opens.
+       Coming back with the browser's own Back button does not reload anything -
+       the page is handed back exactly as it was left, still scrolled to the tape
+       that was opened. That is the browser being helpful, but it means arriving
+       at the archive already halfway into it, with no sense of having returned
+       to the start. Pressing EJECT is the deliberate way back to a particular
+       tape; Back is the way out. */
+    const centre = clampTapeTargetScroll(initialCenter);
+    state.currentScroll = centre;
+    state.targetScroll = centre;
+    state.selectedTape = null;
+    touchFocusedTape = null;
 }
 
 const POS_START = { x: 0, y: 0.6, z: -1.5 };
@@ -1714,20 +1727,16 @@ function handleFinalLoadState() {
 }
 
 // --- TAPE LOADER ---
-const TAPE_LABEL_MODELS = [
-    "models/tape_01.glb",
-    "models/tape_02.glb",
-    "models/tape_03.glb"
-];
 // Caveat first: Handodle draws its digits as decorative stamps, so "Project_01"
 // came out as a name followed by two dark blocks.
-const TAPE_LABEL_FONT_FAMILY = "'Caveat', 'VT323', monospace";
-const TAPE_LABEL_FONT_WEIGHT = "700";
+/* Modavina is the hand the names are written in; the rest are what gets used
+   while it is still on its way, or if it never arrives at all. */
+const TAPE_LABEL_FONT_FAMILY = "'Modavina', 'Caveat', 'VT323', cursive";
+
+/* Modavina has one weight. Asking for bold would have the browser draw a
+   thickened imitation of it, which is not the hand that was drawn. */
+const TAPE_LABEL_FONT_WEIGHT = "400";
 const TAPE_LABEL_INK = "#241f1c";
-const TAPE_LABEL_UP = new THREE.Vector3(0, 1, 0);
-const TAPE_LABEL_ALT_UP = new THREE.Vector3(0, 0, 1);
-// Which way every name runs down the spine. Flip to false to read bottom to top.
-const TAPE_LABEL_READS_DOWN = true;
 
 const TAPE_BOX_TEXTURES = [
     "textures/tape_01.jpg",
@@ -1740,20 +1749,13 @@ const TAPE_BOX_TEXTURES = [
 ];
 
 const tapeLoader = new GLTFLoader(tapeManager);
-const tapeLabelLoader = new GLTFLoader(tapeManager);
-const tapeFilmLoader = new GLTFLoader(tapeManager);
 const tapeBoxTextureLoader = new THREE.TextureLoader(tapeManager);
 
 let tapeGltf = null;
-const tapeLabelGltfs = new Array(TAPE_LABEL_MODELS.length).fill(null);
-/* A strip of film stuck across the tape. One model, worn by every one of them,
-   the same as the box artwork - it is the same object each time, not a thing
-   chosen per project. */
-let tapeFilmGltf = null;
 const tapeBoxTextures = new Array(TAPE_BOX_TEXTURES.length).fill(null);
 let tapeBoxTexturesSettled = 0;
 // Redraw hooks, replayed once the handwriting font finishes loading
-const tapeLabelTextDraws = [];
+const tapeTextureRedraws = [];
 
 // Stable per-tape pick: a project always wears the same sleeve and sticker, but the
 // row reads as random instead of cycling 1-2-3-1-2-3. The salt keeps the two picks
@@ -1766,375 +1768,135 @@ function pickTapeVariant(tapeIndex, salt, count) {
     return (x >>> 0) % count;
 }
 
-function pickTapeLabelIndex(tapeIndex, count) {
-    return pickTapeVariant(tapeIndex, 1, count);
-}
+/* How far a clip carries the thing it animates: the furthest any keyframe gets
+   from where it started, and the widest angle it turns through. */
+function clipReach(clip) {
+    let travel = 0;
+    let turn = 0;
 
-function pickTapeBoxTexture(tapeIndex) {
-    const loaded = tapeBoxTextures.filter(Boolean);
-    if (!loaded.length) return null;
-    return loaded[pickTapeVariant(tapeIndex, 97, loaded.length)];
-}
+    for (const track of clip.tracks || []) {
+        const v = track.values;
+        // Two keyframes of position is six numbers, which is a real clip
+        if (!v || v.length < 6) continue;
 
-// The animation drives one node inside the tape, so the label has to hang off that
-// node (not the scene root) to travel with it.
-function getAnimatedTapeNode(root, animations) {
-    for (const clip of animations || []) {
-        for (const track of clip.tracks || []) {
-            const split = track.name.lastIndexOf('.');
-            if (split < 0) continue;
-            const node = root.getObjectByName(track.name.slice(0, split));
-            if (node) return node;
-        }
-    }
-    return root.children[0] || root;
-}
-
-function getTapeLabelMesh(labelRoot) {
-    let found = null;
-    labelRoot.traverse((child) => {
-        if (!found && child.isMesh) found = child;
-    });
-    return found;
-}
-
-// Read the writing frame off the UV mapping rather than the mesh axes: the texture's
-// U and V directions are the only thing the canvas is actually glued to, so this holds
-// however the sticker was exported - rotated, mirrored, or with transforms applied in
-// Blender, which moves the quad onto completely different local axes.
-function getTapeLabelTextFrame(mesh) {
-    const geometry = mesh.geometry;
-    const position = geometry.attributes.position;
-    const uv = geometry.attributes.uv;
-    if (!position || !uv) return null;
-
-    const index = geometry.index;
-    const i0 = index ? index.getX(0) : 0;
-    const i1 = index ? index.getX(1) : 1;
-    const i2 = index ? index.getX(2) : 2;
-
-    const p0 = new THREE.Vector3().fromBufferAttribute(position, i0);
-    const e1 = new THREE.Vector3().fromBufferAttribute(position, i1).sub(p0);
-    const e2 = new THREE.Vector3().fromBufferAttribute(position, i2).sub(p0);
-
-    const uv0 = new THREE.Vector2().fromBufferAttribute(uv, i0);
-    const d1 = new THREE.Vector2().fromBufferAttribute(uv, i1).sub(uv0);
-    const d2 = new THREE.Vector2().fromBufferAttribute(uv, i2).sub(uv0);
-
-    const det = d1.x * d2.y - d2.x * d1.y;
-    if (!det) return null;
-    const r = 1 / det;
-
-    mesh.updateWorldMatrix(true, false);
-    const basis = new THREE.Matrix3().setFromMatrix4(mesh.matrixWorld);
-
-    // World directions the texture's U (left to right) and V (top to bottom) run along
-    const uDir = e1.clone().multiplyScalar(d2.y * r).addScaledVector(e2, -d1.y * r).applyMatrix3(basis);
-    const vDir = e2.clone().multiplyScalar(d1.x * r).addScaledVector(e1, -d2.x * r).applyMatrix3(basis);
-    const uLength = uDir.length();
-    const vLength = vDir.length();
-    if (!uLength || !vLength) return null;
-
-    const normal = geometry.attributes.normal
-        ? new THREE.Vector3().fromBufferAttribute(geometry.attributes.normal, i0)
-            .applyMatrix3(new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld)).normalize()
-        : new THREE.Vector3().crossVectors(uDir, vDir).normalize();
-
-    uDir.normalize();
-    vDir.normalize();
-
-    // Where right and down are for someone looking straight at the sticker
-    const up = Math.abs(normal.dot(TAPE_LABEL_UP)) > 0.99 ? TAPE_LABEL_ALT_UP : TAPE_LABEL_UP;
-    const screenRight = new THREE.Vector3().crossVectors(normal.clone().negate(), up).normalize();
-    const screenDown = new THREE.Vector3().crossVectors(screenRight, normal).normalize();
-
-    const rx = uDir.dot(screenRight);
-    const ry = uDir.dot(screenDown);
-    const dx = vDir.dot(screenRight);
-    const dy = vDir.dot(screenDown);
-
-    // Mirroring a sticker to make it readable also reverses which end the writing
-    // starts from, so the two have to be decided together - otherwise a mirrored
-    // sticker ends up running down the spine while the others run up it.
-    const mirrored = (rx * dy - ry * dx) < 0;
-    const runsDown = (mirrored ? -ry : ry) > 0;
-
-    return {
-        aspect: uLength / vLength,  // texel shape, so the writing never stretches
-        mirrored,
-        flipped: TAPE_LABEL_READS_DOWN ? !runsDown : runsDown
-    };
-}
-
-// Each sticker is a torn scrap floating inside its quad, so read the alpha mask to
-// find where the paper actually is and keep the writing on it.
-function getTapeLabelInkArea(material) {
-    const fallback = { x: 0.5, y: 0.5, width: 0.7, height: 0.4 };
-    const image = material && material.map && material.map.image;
-    if (!image || !image.width || !image.height) return fallback;
-
-    try {
-        const sample = 128;
-        const canvas = document.createElement("canvas");
-        canvas.width = sample;
-        canvas.height = sample;
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
-        ctx.drawImage(image, 0, 0, sample, sample);
-        const data = ctx.getImageData(0, 0, sample, sample).data;
-
-        let minX = sample, minY = sample, maxX = -1, maxY = -1;
-        for (let y = 0; y < sample; y++) {
-            for (let x = 0; x < sample; x++) {
-                if (data[(y * sample + x) * 4 + 3] < 200) continue;
-                if (x < minX) minX = x;
-                if (x > maxX) maxX = x;
-                if (y < minY) minY = y;
-                if (y > maxY) maxY = y;
+        if (/\.position$/.test(track.name)) {
+            for (let i = 3; i + 2 < v.length; i += 3) {
+                travel = Math.max(travel, Math.hypot(v[i] - v[0], v[i + 1] - v[1], v[i + 2] - v[2]));
+            }
+        } else if (/\.quaternion$/.test(track.name)) {
+            for (let i = 4; i + 3 < v.length; i += 4) {
+                const dot = Math.min(1, Math.abs(
+                    v[i] * v[0] + v[i + 1] * v[1] + v[i + 2] * v[2] + v[i + 3] * v[3]));
+                turn = Math.max(turn, 2 * Math.acos(dot));
             }
         }
-        if (maxX < minX || maxY < minY) return fallback;
-
-        // Hold back from the torn edge so no letter runs off the paper
-        const inset = 0.12;
-        return {
-            x: (minX + maxX + 1) / 2 / sample,
-            y: (minY + maxY + 1) / 2 / sample,
-            width: ((maxX - minX + 1) / sample) * (1 - inset * 2),
-            height: ((maxY - minY + 1) / sample) * (1 - inset * 2)
-        };
-    } catch (err) {
-        // Tainted or undecodable image - fall back to a safe centred box
-        return fallback;
     }
+
+    return { travel, turn };
 }
 
-function createTapeLabelTextTexture(text, aspect, orientation, seed, area) {
-    // 512 is roughly double what the sticker ever covers on screen, and every tape
-    // carries its own copy of this canvas
-    const canvas = document.createElement("canvas");
-    canvas.width = 512;
-    canvas.height = Math.max(48, Math.round(512 / Math.max(aspect, 0.001)));
+/* Which clip is the hover and which is the flip.
+   Not by the order they came out of the exporter - that is Blender's business
+   and it has changed with every export of this model so far, swapping the two
+   over each time and leaving the tape flipping open at the mere passage of a
+   pointer. Not by name either, now that an export has arrived with both clips
+   called tape.001Action and nothing to tell them apart.
+   So by what they do. A hover is a nudge and a flip is the tape turning over,
+   and the difference between them is not subtle: on this model the flip travels
+   four and a half times as far. The smaller movement is the hover.
+   A clip actually named "hover" still wins outright, so naming one in Blender
+   settles it for good and none of this has to be guessed at. */
+function findTapeClips(animations) {
+    const clips = (animations || []).filter(Boolean);
+    if (!clips.length) return { hover: null, flip: null };
+    if (clips.length === 1) return { hover: clips[0], flip: null };
 
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.flipY = false; // glTF UVs start at the top left, same as the canvas
-    // Same colour space the loader gives the paper texture, so the ink is the tone it was written in
-    texture.encoding = THREE.sRGBEncoding;
-    texture.wrapS = THREE.ClampToEdgeWrapping;
-    texture.wrapT = THREE.ClampToEdgeWrapping;
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    texture.generateMipmaps = false;
-    texture.anisotropy = 4;
+    const named = clips.find((clip) => /hover/i.test(clip.name || ""));
+    if (named) {
+        return { hover: named, flip: clips.find((clip) => clip !== named) || null };
+    }
 
-    // A degree of wobble either way, so the row does not look machine printed
-    const tilt = (((seed * 37) % 100) / 100 - 0.5) * 2.4 * (Math.PI / 180);
-
-    const draw = () => {
-        const ctx = canvas.getContext("2d");
-        const w = canvas.width;
-        const h = canvas.height;
-        ctx.clearRect(0, 0, w, h);
-        if (!text) return;
-
-        let fontSize = Math.max(12, Math.round(area.height * h * 0.72));
-        const maxWidth = area.width * w;
-        ctx.font = `${TAPE_LABEL_FONT_WEIGHT} ${fontSize}px ${TAPE_LABEL_FONT_FAMILY}`;
-        while (fontSize > 10 && ctx.measureText(text).width > maxWidth) {
-            fontSize -= 2;
-            ctx.font = `${TAPE_LABEL_FONT_WEIGHT} ${fontSize}px ${TAPE_LABEL_FONT_FAMILY}`;
-        }
-
-        ctx.save();
-        ctx.translate(area.x * w, area.y * h);
-        if (orientation.flipped) ctx.rotate(Math.PI);
-        if (orientation.mirrored) ctx.scale(-1, 1);
-        ctx.rotate(tilt);
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillStyle = TAPE_LABEL_INK;
-        ctx.globalAlpha = 0.92;
-        ctx.fillText(text, 0, 0);
-        ctx.restore();
-
-        texture.needsUpdate = true;
-    };
-
-    tapeLabelTextDraws.push(draw);
-    draw();
-
-    return texture;
-}
-
-// The project name, written on the sticker as a second quad sharing its geometry
-function addTapeLabelText(labelRoot, tape, text) {
-    const mesh = getTapeLabelMesh(labelRoot);
-    if (!mesh || !text) return null;
-
-    const frame = getTapeLabelTextFrame(mesh);
-    if (!frame) return null;
-
-    const paperMaterial = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-    const inkArea = getTapeLabelInkArea(paperMaterial);
-    const texture = createTapeLabelTextTexture(text, frame.aspect, frame, tape.userData.index, inkArea);
-
-    const material = new THREE.MeshStandardMaterial({
-        map: texture,
-        transparent: true,
-        roughness: 0.95,
-        metalness: 0,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-        polygonOffset: true,
-        polygonOffsetFactor: -2,
-        polygonOffsetUnits: -2
+    const reach = new Map(clips.map((clip) => [clip, clipReach(clip)]));
+    const order = clips.slice().sort((a, b) => {
+        const ra = reach.get(a);
+        const rb = reach.get(b);
+        // How far it goes decides it; how far it turns settles a tie
+        if (Math.abs(ra.travel - rb.travel) > 1e-4) return ra.travel - rb.travel;
+        return ra.turn - rb.turn;
     });
-    material.userData.keepTransparent = true;
-    material.userData.baseColor = material.color.clone();
 
-    // Same quad, same transform - it just rides a hair in front in draw order
-    const textMesh = new THREE.Mesh(mesh.geometry, material);
-    textMesh.name = "tape_label_text";
-    textMesh.position.copy(mesh.position);
-    textMesh.quaternion.copy(mesh.quaternion);
-    textMesh.scale.copy(mesh.scale);
-    textMesh.frustumCulled = false;
-    textMesh.castShadow = false;
-    textMesh.receiveShadow = false;
-    textMesh.renderOrder = 3;
-
-    mesh.parent.add(textMesh);
-    tape.userData.highlightMats.push(material);
-
-    return textMesh;
+    return { hover: order[0], flip: order[order.length - 1] };
 }
 
-/* --- THE PANEL ON THE FILM ----------------------------------------------
-   The film is a taped photo frame with a black window in it, and that window is
-   where a project's picture goes - not across the whole thing, which would bury
-   the paper and the tape that make it read as a photograph at all.
+/* The sleeve artwork the tapes used to wear, one of a pool picked per tape. The
+   model carries its own material now, so this is turned off - and with it off
+   there is no sense fetching two megabytes of artwork nothing will show. */
+const TAPE_BOX_ART = false;
 
-   Where the window is gets found rather than written down, because a number
-   written here would be wrong the first time the film is exported again, and
-   wrong quietly. On the film as it stands the reading comes out at
-   { x: 0.164, y: 0.130, w: 0.685, h: 0.626 } - very nearly square.
-   Set FILM_PANEL to say it outright if the reading ever gets it wrong. */
-const FILM_PANEL = null;
+/* --- WHAT IS WRITTEN ON A TAPE -------------------------------------------
+   The model carries two blank areas in its own base map: a square of cream
+   paper on the front, and a tall strip down the spine. A project's picture goes
+   in the first and its name along the second - so every tape is the same model
+   wearing a different texture, rather than the model with things bolted onto it,
+   which is what the separate label and film models used to be.
 
-// Anything this dark, and solid, is a candidate for the window
-const PANEL_DARKNESS = 0.20;
+   These are fractions of the map, measured off the texture rather than guessed:
+   the square is 513 by 512 pixels of a 2048 map, the strip 155 by 746. */
+const TAPE_LABEL_AREA = { x: 0.0625, y: 0.2412, w: 0.2505, h: 0.2500 };
+const TAPE_SPINE_AREA = { x: 0.9243, y: 0.5718, w: 0.0757, h: 0.3643 };
 
-/* Read at this width rather than at full size. The window comes out within a
-   couple of pixels either way, and it is a fiftieth of the work. */
-const PANEL_READ_WIDTH = 512;
+/* Every tape needs its own copy of the map, so this is paid once per project.
+   The model's own map is 2048, which at eleven copies would be more video memory
+   than the rest of the site put together - and a tape is a small thing. */
+const TAPE_TEXTURE_SIZE = 1024;
 
-/* How large a film is drawn. It is a decoration on the side of a tape, a
-   fraction of the screen even when a tape is close - and every tape carries its
-   own, so this is paid for once per project. */
-const FILM_TEXTURE_SIZE = 512;
+/* How much of the paper is left showing around the picture, as a share of the
+   square. The picture is stuck on the label rather than printed to its edges,
+   and the sliver of paper around it is what says so. */
+const TAPE_LABEL_INSET = 0.04;
 
-// Outlines whatever the reading decided, for checking it
-const FILM_PANEL_TEST = false;
+/* A nudge across the spine, as a share of the strip's width. Positive moves the
+   writing towards the left of the texture, whichever way the name is running -
+   the sign is worked out below, so this number need not care. */
+const TAPE_SPINE_SHIFT = 0.07;
 
-let filmPanel = null;
+// Which way the name runs along the spine. Flip it if it reads upside down.
+const TAPE_SPINE_READS_DOWN = true;
 
-/* The window is the largest single run of dark pixels, not the bounding box of
-   every dark pixel there is. The tape corners and the edges of the paper carry
-   dark specks of their own, and taken together those reach almost corner to
-   corner - asking for all of them at once gives back nearly the whole texture. */
-function readFilmPanel(image) {
-    if (FILM_PANEL) return FILM_PANEL;
-    if (filmPanel) return filmPanel;
-    if (!image) return null;
+// Outlines the two areas, for checking they sit where they should
+const TAPE_AREA_TEST = false;
 
-    const fullW = image.width || image.naturalWidth || 0;
-    const fullH = image.height || image.naturalHeight || 0;
-    if (!fullW || !fullH) return null;
-
-    const W = Math.min(PANEL_READ_WIDTH, fullW);
-    const H = Math.max(1, Math.round(fullH * (W / fullW)));
-
-    const probe = document.createElement("canvas");
-    probe.width = W;
-    probe.height = H;
-    const ctx = probe.getContext("2d", { willReadFrequently: true });
-
-    let pixels;
-    try {
-        ctx.drawImage(image, 0, 0, W, H);
-        pixels = ctx.getImageData(0, 0, W, H).data;
-    } catch (err) {
-        // A texture the page is not allowed to read cannot be measured
-        return null;
-    }
-
-    const dark = new Uint8Array(W * H);
-    for (let i = 0; i < W * H; i++) {
-        const at = i * 4;
-        if (pixels[at + 3] < 200) continue;   // off the paper altogether
-        // Rec. 709, near enough for telling black from not
-        const lum = (pixels[at] * 0.2126 + pixels[at + 1] * 0.7152 + pixels[at + 2] * 0.0722) / 255;
-        if (lum <= PANEL_DARKNESS) dark[i] = 1;
-    }
-
-    const seen = new Uint8Array(W * H);
-    const stack = new Int32Array(W * H);
-    let best = null;
-
-    for (let start = 0; start < W * H; start++) {
-        if (!dark[start] || seen[start]) continue;
-
-        let top = 0;
-        stack[top++] = start;
-        seen[start] = 1;
-        let n = 0, l = W, r = -1, t = H, b = -1;
-
-        while (top) {
-            const at = stack[--top];
-            const x = at % W;
-            const y = (at / W) | 0;
-            n++;
-            if (x < l) l = x;
-            if (x > r) r = x;
-            if (y < t) t = y;
-            if (y > b) b = y;
-
-            if (x > 0 && dark[at - 1] && !seen[at - 1]) { seen[at - 1] = 1; stack[top++] = at - 1; }
-            if (x < W - 1 && dark[at + 1] && !seen[at + 1]) { seen[at + 1] = 1; stack[top++] = at + 1; }
-            if (y > 0 && dark[at - W] && !seen[at - W]) { seen[at - W] = 1; stack[top++] = at - W; }
-            if (y < H - 1 && dark[at + W] && !seen[at + W]) { seen[at + W] = 1; stack[top++] = at + W; }
-        }
-
-        if (!best || n > best.n) best = { n, l, r, t, b };
-    }
-
-    if (!best) return null;
-
-    filmPanel = {
-        x: best.l / W,
-        y: best.t / H,
-        w: (best.r - best.l + 1) / W,
-        h: (best.b - best.t + 1) / H
-    };
-
-    console.log("[film] window at " + (filmPanel.x * 100).toFixed(1) + "%, "
-        + (filmPanel.y * 100).toFixed(1) + "%  "
-        + (filmPanel.w * 100).toFixed(1) + "% x " + (filmPanel.h * 100).toFixed(1) + "%"
-        + "   (" + (filmPanel.w / filmPanel.h).toFixed(2) + " : 1)");
-
-    return filmPanel;
+/* Which picture stands for a project on its tape: whatever was chosen for the
+   film in the manager, which falls back to whatever the index shows first. */
+function pickTapePicture(info) {
+    return (info && info.film) || "";
 }
 
-/* The film with one project's picture set into its window. Every tape gets its
-   own copy, since every tape carries a different project. */
-function makeFilmTexture(sourceMap, pictureUrl) {
+/* Fitted to the room it has: shrunk until it fits, and cut short with an
+   ellipsis only when shrinking alone will not do it. */
+function fitTapeText(ctx, text, maxWidth, startSize) {
+    let size = startSize;
+
+    while (size > 8) {
+        ctx.font = `${TAPE_LABEL_FONT_WEIGHT} ${size}px ${TAPE_LABEL_FONT_FAMILY}`;
+        if (ctx.measureText(text).width <= maxWidth) return text;
+        size -= 1;
+    }
+
+    let cut = text;
+    while (cut.length > 1 && ctx.measureText(cut + "…").width > maxWidth) {
+        cut = cut.slice(0, -1);
+    }
+    return cut + "…";
+}
+
+/* One tape's base map: the model's own, with this project's picture set into
+   the paper square and its name written down the spine. */
+function makeTapeTexture(sourceMap, info) {
     const image = sourceMap && sourceMap.image;
-    const panel = readFilmPanel(image);
-    if (!panel || !pictureUrl) return sourceMap;
+    if (!image) return sourceMap;
 
-    /* Not the texture's own size. At full resolution this is four megabytes of
-       canvas per tape and the same again in video memory, for something that
-       never covers more than a small part of the screen. */
-    const size = Math.min(FILM_TEXTURE_SIZE, Math.max(image.width || 512, image.height || 512));
+    const size = TAPE_TEXTURE_SIZE;
     const canvas = document.createElement("canvas");
     canvas.width = size;
     canvas.height = size;
@@ -2147,186 +1909,100 @@ function makeFilmTexture(sourceMap, pictureUrl) {
     texture.wrapT = sourceMap.wrapT;
     texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 
-    const box = {
-        x: panel.x * size,
-        y: panel.y * size,
-        w: panel.w * size,
-        h: panel.h * size
-    };
+    const area = (a) => ({ x: a.x * size, y: a.y * size, w: a.w * size, h: a.h * size });
+    const label = area(TAPE_LABEL_AREA);
+    const spine = area(TAPE_SPINE_AREA);
+    const title = (info && info.title) ? String(info.title).trim() : "";
 
     const paint = (picture) => {
         ctx.clearRect(0, 0, size, size);
 
-        /* The film first. Its window is solid black, so the picture has to go
-           over it - painted underneath, it would simply be covered up. */
-        if (image) {
-            try { ctx.drawImage(image, 0, 0, size, size); } catch (err) { return; }
+        // The model's own map underneath everything
+        try { ctx.drawImage(image, 0, 0, size, size); } catch (err) { return; }
+
+        /* Fitted whole inside the square and inset from it, rather than filled
+           into it and trimmed. Nothing of the picture is lost, and the paper
+           shows as a thin border all the way round - which is what a photograph
+           stuck on a label looks like.
+           A picture that is not square leaves more paper on two sides than the
+           other two. That is what happens when a photograph is not the shape of
+           the label it is stuck to, and it looks like it. */
+        if (picture) {
+            const room = {
+                w: label.w * (1 - TAPE_LABEL_INSET * 2),
+                h: label.h * (1 - TAPE_LABEL_INSET * 2)
+            };
+            const scale = Math.min(room.w / picture.width, room.h / picture.height);
+            const pw = picture.width * scale;
+            const ph = picture.height * scale;
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(label.x, label.y, label.w, label.h);
+            ctx.clip();
+            ctx.drawImage(picture, label.x + (label.w - pw) / 2, label.y + (label.h - ph) / 2, pw, ph);
+            ctx.restore();
         }
 
-        if (!picture) { texture.needsUpdate = true; return; }
+        /* The name down the spine. The strip is nearly five times taller than it
+           is wide, so the writing is turned a quarter turn and laid along it. */
+        if (title) {
+            ctx.save();
+            ctx.translate(spine.x + spine.w / 2, spine.y + spine.h / 2);
+            ctx.rotate(TAPE_SPINE_READS_DOWN ? Math.PI / 2 : -Math.PI / 2);
 
-        /* Filled into the window and trimmed, not fitted - a band of black
-           around a picture reads as a mistake, where a crop reads as a photo. */
-        const scale = Math.max(box.w / picture.width, box.h / picture.height);
-        const pw = picture.width * scale;
-        const ph = picture.height * scale;
+            ctx.fillStyle = TAPE_LABEL_INK;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(box.x, box.y, box.w, box.h);
-        ctx.clip();
-        ctx.drawImage(picture, box.x + (box.w - pw) / 2, box.y + (box.h - ph) / 2, pw, ph);
+            /* A quarter turn puts the strip's width along the local y axis, and
+               which way along it depends on which way the name is running - so
+               the nudge is turned the same way the writing was. */
+            const across = spine.w * TAPE_SPINE_SHIFT * (TAPE_SPINE_READS_DOWN ? 1 : -1);
 
-        /* The scratches and dust laid back over the picture, keeping only what
-           is brighter than it. Without this the window comes out clean and new
-           while the paper around it is a hundred years old. */
-        if (image) {
-            ctx.globalCompositeOperation = "lighten";
-            try { ctx.drawImage(image, 0, 0, size, size); } catch (err) { /* leave it clean */ }
+            // Short of the full length, so nothing is written to the very edge
+            ctx.fillText(fitTapeText(ctx, title, spine.h * 0.86, Math.round(spine.w * 0.52)), 0, across);
+            ctx.restore();
         }
-        ctx.restore();
 
-        if (FILM_PANEL_TEST) {
-            ctx.strokeStyle = "#ff4d4d";
-            ctx.lineWidth = 4;
-            ctx.strokeRect(box.x, box.y, box.w, box.h);
+        if (TAPE_AREA_TEST) {
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = "#ff3b3b";
+            ctx.strokeRect(label.x, label.y, label.w, label.h);
+            ctx.strokeStyle = "#3bb0ff";
+            ctx.strokeRect(spine.x, spine.y, spine.w, spine.h);
         }
 
         texture.needsUpdate = true;
     };
 
-    // The film alone until the picture arrives, and the two of them after
-    paint(null);
+    // Whatever has arrived so far, so a redraw does not lose it
+    let arrived = null;
+    const repaint = () => paint(arrived);
 
-    const picture = new Image();
+    /* The handwriting face may still be loading, in which case the name is first
+       written in whatever the browser had to hand. This puts it right. */
+    tapeTextureRedraws.push(repaint);
+    repaint();
 
-    /* A picture from another site - a video still, say - taints the canvas it
-       is drawn on, and a tainted canvas cannot be given to WebGL at all: the
-       film would fail entirely rather than merely lack a photograph. Asking
-       across with CORS means it either arrives usable or does not arrive. */
-    if (/^https?:/i.test(pictureUrl)) picture.crossOrigin = "anonymous";
-
-    picture.onload = () => paint(picture);
-    picture.onerror = () => { /* no picture: the film stands as it is */ };
-    picture.src = pictureUrl;
+    const pictureUrl = pickTapePicture(info);
+    if (pictureUrl) {
+        const picture = new Image();
+        if (/^https?:/i.test(pictureUrl)) picture.crossOrigin = "anonymous";
+        picture.onload = () => { arrived = picture; repaint(); };
+        picture.onerror = () => { /* no picture: the paper stays blank */ };
+        picture.src = pictureUrl;
+    }
 
     return texture;
 }
 
-/* Which picture goes on a project's film. Worked out when the site was built -
-   whatever was chosen for the film, or failing that whatever was starred first
-   for the index. */
-function pickTapeFilmPicture(info) {
-    return (info && info.film) || "";
-}
+function pickTapeBoxTexture(tapeIndex) {
+    if (!TAPE_BOX_ART) return null;
 
-/* The film is dressed the way the paper label is, and for the same reasons: it
-   is a blended plane stuck on the tape, so its alpha is the whole point of it
-   and must survive the per-frame pass that forces everything else solid, and an
-   alpha-blended thing casting shadow would throw the silhouette of its whole
-   quad rather than of the film. It joins the tape's highlight list too, so it
-   dims and brightens with the tape instead of staying lit while the tape it is
-   stuck to goes dark.
-   A film exported without blending is a solid object, and is treated as one. */
-function prepareTapeFilm(filmRoot, tape, pictureUrl) {
-    filmRoot.traverse((child) => {
-        if (!child.isMesh) return;
-
-        child.frustumCulled = false;
-        child.renderOrder = 1;   // under the label, which sits at 2
-
-        // clone() shares materials, so give every tape its own copy to tint
-        if (Array.isArray(child.material)) {
-            child.material = child.material.map(m => m.clone());
-        } else if (child.material) {
-            child.material = child.material.clone();
-        }
-
-        const mats = Array.isArray(child.material) ? child.material : [child.material];
-        const blended = mats.some((mat) => mat && mat.transparent);
-
-        child.castShadow = !blended;
-        child.receiveShadow = !blended;
-
-        mats.forEach((mat) => {
-            if (!mat) return;
-            if (!mat.userData) mat.userData = {};
-
-            if (blended) {
-                // Marks it so the per-frame "force opaque" pass leaves its alpha alone
-                mat.userData.keepTransparent = true;
-
-                // Stuck flat against the tape, so bias it out of z-fighting
-                mat.polygonOffset = true;
-                mat.polygonOffsetFactor = -1;
-                mat.polygonOffsetUnits = -1;
-                mat.depthWrite = false;
-            }
-
-            if (mat.map) {
-                mat.map = makeFilmTexture(mat.map, pictureUrl);
-            }
-
-            if (mat.color && !mat.userData.baseColor) {
-                mat.userData.baseColor = mat.color.clone();
-            }
-            if (typeof mat.emissiveIntensity === 'number' && typeof mat.userData.baseEmissiveIntensity !== 'number') {
-                mat.userData.baseEmissiveIntensity = mat.emissiveIntensity;
-            }
-            mat.needsUpdate = true;
-
-            if (!tape.userData.highlightMats.includes(mat)) {
-                tape.userData.highlightMats.push(mat);
-            }
-        });
-    });
-}
-
-function prepareTapeLabel(labelRoot, tape) {
-    labelRoot.traverse((child) => {
-        if (!child.isMesh) return;
-
-        child.frustumCulled = false;
-        // An alpha-blended decal would cast a solid rectangle, so keep it out of the shadow pass
-        child.castShadow = false;
-        child.receiveShadow = false;
-        child.renderOrder = 2;
-
-        // clone() shares materials, so give every tape its own copy to tint
-        if (Array.isArray(child.material)) {
-            child.material = child.material.map(m => m.clone());
-        } else if (child.material) {
-            child.material = child.material.clone();
-        }
-
-        const mats = Array.isArray(child.material) ? child.material : [child.material];
-        mats.forEach((mat) => {
-            if (!mat) return;
-            if (!mat.userData) mat.userData = {};
-
-            // Marks the label so the per-frame "force opaque" pass leaves its alpha alone
-            mat.userData.keepTransparent = true;
-
-            // It is modelled flush with the spine face, so bias it out of z-fighting
-            mat.polygonOffset = true;
-            mat.polygonOffsetFactor = -1;
-            mat.polygonOffsetUnits = -1;
-            mat.depthWrite = false;
-
-            if (mat.color && !mat.userData.baseColor) {
-                mat.userData.baseColor = mat.color.clone();
-            }
-            if (typeof mat.emissiveIntensity === 'number' && typeof mat.userData.baseEmissiveIntensity !== 'number') {
-                mat.userData.baseEmissiveIntensity = mat.emissiveIntensity;
-            }
-            mat.needsUpdate = true;
-
-            // Joins the highlight list so the label dims and brightens with its tape
-            if (!tape.userData.highlightMats.includes(mat)) {
-                tape.userData.highlightMats.push(mat);
-            }
-        });
-    });
+    const loaded = tapeBoxTextures.filter(Boolean);
+    if (!loaded.length) return null;
+    return loaded[pickTapeVariant(tapeIndex, 97, loaded.length)];
 }
 
 function buildTapes() {
@@ -2334,8 +2010,10 @@ function buildTapes() {
         const tape = tapeGltf.scene.clone();
         const mixer = new THREE.AnimationMixer(tape);
 
-        let action1 = tapeGltf.animations[1] ? mixer.clipAction(tapeGltf.animations[1]) : null;
-        let action2 = tapeGltf.animations[0] ? mixer.clipAction(tapeGltf.animations[0]) : null;
+        // action1 is the hover, action2 the flip - everything downstream calls them so
+        const clips = findTapeClips(tapeGltf.animations);
+        let action1 = clips.hover ? mixer.clipAction(clips.hover) : null;
+        let action2 = clips.flip ? mixer.clipAction(clips.flip) : null;
 
         if (action1) { action1.setLoop(THREE.LoopOnce); action1.clampWhenFinished = true; action1.timeScale = 1.0; }
         if (action2) { action2.setLoop(THREE.LoopOnce); action2.clampWhenFinished = true; action2.timeScale = 1.0; }
@@ -2376,10 +2054,12 @@ function buildTapes() {
                     if (!tape.userData.highlightMats.includes(mat)) {
                         tape.userData.highlightMats.push(mat);
                     }
-                    // Swap in this tape's sleeve art. Only materials that already
-                    // carry artwork get one, so anything untextured is left alone.
-                    if (boxTexture && mat.map) {
-                        mat.map = boxTexture;
+                    /* This project's picture and name, written into the tape's
+                       own map. Only a material that already carries a map gets
+                       one, so anything untextured is left alone - and the old
+                       sleeve artwork still wins outright where it is turned on. */
+                    if (mat.map) {
+                        mat.map = boxTexture || makeTapeTexture(mat.map, projectData[i]);
                     }
                     mat.transparent = false;
                     mat.opacity = 1;
@@ -2396,46 +2076,20 @@ function buildTapes() {
             }
         });
 
-        // Parent the paper label to the animated node, keeping the offset it was
-        // authored with, so it rides along with every move of the tape.
-        const labelSource = tapeLabelGltfs[pickTapeLabelIndex(i, tapeLabelGltfs.length)];
-        if (labelSource) {
-            const label = labelSource.scene.clone(true);
-            label.name = "tape_label";
-            prepareTapeLabel(label, tape);
-            getAnimatedTapeNode(tape, tapeGltf.animations).add(label);
-            addTapeLabelText(label, tape, projectData[i] && projectData[i].title);
-            tape.userData.label = label;
-        }
-
-        /* Stuck to the animated node, keeping the offset it was authored with,
-           so it rides along with every move of the tape exactly as the label
-           does - it was placed against the tape in the model, and that placing
-           is the whole of its positioning. */
-        if (tapeFilmGltf) {
-            const film = tapeFilmGltf.scene.clone(true);
-            film.name = "tape_film";
-            prepareTapeFilm(film, tape, pickTapeFilmPicture(projectData[i]));
-            getAnimatedTapeNode(tape, tapeGltf.animations).add(film);
-            tape.userData.film = film;
-        }
-
         scene.add(tape);
         tapes.push(tape);
     }
 }
 
-// All four models feed the same loading manager, and the tapes are only assembled
-// once every one has arrived - whichever finishes last runs the build.
+/* One model now: the paper label and the strip of film that used to be bolted
+   on are part of the tape itself, written into its own texture. */
 const buildTapesWhenReady = () => {
     if (!tapeGltf) return;
-    if (tapeLabelGltfs.some(gltf => !gltf)) return;
-    if (!tapeFilmGltf) return;
-    if (tapeBoxTexturesSettled < TAPE_BOX_TEXTURES.length) return;
+    if (TAPE_BOX_ART && tapeBoxTexturesSettled < TAPE_BOX_TEXTURES.length) return;
     buildTapes();
 };
 
-TAPE_BOX_TEXTURES.forEach((url, index) => {
+if (TAPE_BOX_ART) TAPE_BOX_TEXTURES.forEach((url, index) => {
     tapeBoxTextureLoader.load(
         url,
         (texture) => {
@@ -2465,22 +2119,10 @@ tapeLoader.load("models/tape.glb", gltf => {
     buildTapesWhenReady();
 });
 
-tapeFilmLoader.load("models/film.glb", gltf => {
-    tapeFilmGltf = gltf;
-    buildTapesWhenReady();
-});
-
-TAPE_LABEL_MODELS.forEach((url, index) => {
-    tapeLabelLoader.load(url, gltf => {
-        tapeLabelGltfs[index] = gltf;
-        buildTapesWhenReady();
-    });
-});
-
 // The handwriting face may still be loading when the tapes are built, so redraw
 // the names once it lands.
 if (document.fonts) {
-    const refreshTapeLabelText = () => tapeLabelTextDraws.forEach(draw => draw());
+    const refreshTapeLabelText = () => tapeTextureRedraws.forEach(draw => draw());
     document.fonts.load(`${TAPE_LABEL_FONT_WEIGHT} 64px ${TAPE_LABEL_FONT_FAMILY}`).then(refreshTapeLabelText).catch(() => {});
     document.fonts.ready.then(refreshTapeLabelText).catch(() => {});
 }
